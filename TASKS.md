@@ -210,9 +210,9 @@ main      ← Oracle (ArgoCD lê main → overlays/oracle)
 
 ### Épico G — Fundação do repo e Gitflow
 
-- [x] **G1 · P0 · S — Inicializar o repo.** Criar `main` com README mínimo + `.gitignore` (nada de `*.key`, `*.mmdb`, `*.tfstate`, `*.tfvars`, Secret em claro) e derivar `develop` (branch padrão).
+- [ ] **G1 · P0 · S — Inicializar o repo.** Criar `main` com README mínimo + `.gitignore` (nada de `*.key`, `*.mmdb`, `*.tfstate`, `*.tfvars`, Secret em claro) e derivar `develop` (branch padrão).
   *Pronto quando:* as duas branches existem.
-  ✅ *Feito:* `develop` criada e é a padrão; **falta criar `main`**.
+  ◐ *Parcial:* `develop` criada e é a padrão; **falta criar `main`** (depois do merge do PR #1).
 - [ ] **G2 · P0 · S — Proteção de branches.** `main`/`develop`: PR + status checks (C1, C2), sem push direto. **Bypass só para a identidade do bot de release** (D2).
 - [ ] **G3 · P1 · S — `CODEOWNERS`, template de PR, convenção de commit/branch** no README.
 - [ ] **G4 · P1 · S — `CLAUDE.md`** na raiz (produto: Lumi/Travessia/Portal; tecnologia: K3s, Kustomize, ArgoCD; estrutura: árvore acima; regras: Secret nunca em claro, paths do Ingress com `/` final, mudança só via Git). Criar `docs/uso-do-claude.md` já agora e **registrar cada prompt/decisão conforme acontece** (10% da nota).

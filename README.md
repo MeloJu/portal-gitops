@@ -39,7 +39,7 @@ arquitetura e os riscos estão em [`TASKS.md`](TASKS.md).
 graph LR
     U["Navegador"] -->|HTTP| T["Ingress (Traefik)"]
     T -->|"/"| FE["Deployment: frontend<br/>nginx :8080"]
-    T -->|"/api/ e /r/"| API["Deployment: l2-api<br/>Spring Boot :8080<br/>HPA 1-3 réplicas"]
+    T -->|"/api/ e /r/"| API["Deployment: l2-api<br/>Spring Boot :8080<br/>HPA por CPU"]
     FE -->|"/tools/"| TA["Deployment: tools-api<br/>:3001"]
     API -->|"JDBC via nome do Service<br/>(DNS interno, nunca IP)"| SVC["Service: postgres"]
     SVC --> DB["Deployment: postgres 18<br/>1 réplica, strategy Recreate"]
@@ -164,8 +164,10 @@ que o antigo ainda segura, e o rollout travaria.
 
 ```bash
 curl -s http://$H/actuator/prometheus | head -c 60   # devolve o HTML do SPA, não métricas
-kubectl -n l2 run t --rm -it --restart=Never --image=curlimages/curl -- \
-  curl -s http://l2-api:8081/actuator/health/readiness    # por dentro do cluster: {"status":"UP"}
+# por dentro do cluster: {"status":"UP"}. Roda em outro namespace porque o `l2` recusa pods que
+# não cumprem o Pod Security `restricted` (é a prova de que a política está valendo).
+kubectl -n default run t --rm -it --restart=Never --image=curlimages/curl -- \
+  curl -s http://l2-api.l2:8081/actuator/health/readiness
 ```
 
 ### Escalonamento automático
