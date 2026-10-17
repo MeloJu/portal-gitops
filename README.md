@@ -28,10 +28,10 @@ arquitetura e os riscos estão em [`TASKS.md`](TASKS.md).
 
 > **Estado atual.** ✅ pronto e validado em cluster real · 🚧 planejado, ver [`TASKS.md`](TASKS.md)
 >
-> ✅ Sealed Secrets (controller + scripts) · ✅ aplicação no Kubernetes (API, banco, frontend, tools-api, Ingress, HPA) · ✅ ArgoCD sincronizando o repositório ·
+> ✅ TLS self-signed (cert-manager) e IP real do cliente no Traefik · ✅ Sealed Secrets (controller + scripts) · ✅ aplicação no Kubernetes (API, banco, frontend, tools-api, Ingress, HPA) · ✅ ArgoCD sincronizando o repositório ·
 > ✅ CI de PR (kustomize, kubeconform, yamllint, gitleaks) ·
 > 🚧 imagens publicadas pelo `portal-app` com bump automático · 🚧 OpenTelemetry, Tempo, Prometheus e Grafana ·
-> 🚧 NetworkPolicies e TLS · 🚧 overlay `oracle` e `terraform/`
+> 🚧 NetworkPolicies · 🚧 ambiente Oracle e `terraform/` (adiados)
 
 ## 🏗️ Arquitetura
 
@@ -192,6 +192,7 @@ k3d cluster delete l2        # remove o cluster inteiro
 | --- | --- |
 | [`TASKS.md`](TASKS.md) | Plano por épico, decisões de arquitetura, riscos e checklist de entregáveis |
 | [`docs/uso-do-claude.md`](docs/uso-do-claude.md) | Como o Claude foi usado: prompts, decisões e o que ele errou |
+| [`docs/plataforma-local.md`](docs/plataforma-local.md) | cert-manager e TLS, Traefik com IP real do cliente, metrics-server, com o que foi verificado |
 | [`docs/sealed-secrets.md`](docs/sealed-secrets.md) | Segredo no Git: como selar, escopo, **backup da chave** e o que foi comprovado em cluster |
 | [`apps/l2/base/`](apps/l2/base) | Os manifests, com o *porquê* de cada decisão nos comentários |
 | `docs/ci-cd.md`, `docs/hardening.md`, `docs/observabilidade.md` | 🚧 a escrever junto com cada marco |
@@ -233,7 +234,7 @@ portal-gitops/
 │   ├── 📂 base/              # manifests da aplicação (namespace l2)
 │   └── 📂 overlays/          # local (k3d, segue develop) · ci (kind efêmero) · oracle 🚧
 ├── 📂 bootstrap/             # ArgoCD (versão fixada) + app-of-apps
-├── 📂 platform/              # camada de plataforma via ArgoCD (sealed-secrets; o resto 🚧)
+├── 📂 platform/              # plataforma via ArgoCD: sealed-secrets, cert-manager, traefik (observabilidade 🚧)
 ├── 📂 scripts/               # bootstrap-local.sh, load-local-images.sh, seal-secret.sh, sealed-secrets-key.sh
 ├── 📂 docs/                  # uso do Claude, e a documentação dos marcos
 ├── 📂 .github/workflows/     # pr-validate.yml

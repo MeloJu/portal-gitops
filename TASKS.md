@@ -7,6 +7,7 @@ adaptando o desafio de referência [`k8s-postgrest-challenge`](https://github.co
 
 > Repo de destino: `https://github.com/MeloJu/portal-gitops`. A árvore abaixo usa o layout "l2-gitops" combinado.
 > **Copiloto de IA:** o enunciado do desafio cita o Kiro, mas a organização liberou o **Claude** no lugar. O uso é registrado em `docs/uso-do-claude.md` (critério "Uso do copiloto", 10% da nota).
+> **Escopo atual:** só o cluster **local**. O ambiente Oracle (e o que depende dele: Let's Encrypt, SealedSecret de produção, Terraform) foi adiado.
 > **Status:** M1 implementado e validado em cluster k3d real (ver §7 — tasks marcadas `[x]`). Pendente: validar o app-of-apps `root` depois do merge em `develop`.
 > Legenda: **P0** = sem isso não há demo · **P1** = nota alta · **P2** = diferencial. Tamanho: **S** (<1h) · **M** (1–3h) · **L** (>3h).
 
@@ -224,10 +225,13 @@ main      ← Oracle (ArgoCD lê main → overlays/oracle)
   ✅ *Feito:* cluster k3d + ArgoCD + Secret + app-of-apps; testado do zero.
 - [x] **P2 · P0 · M — Sealed Secrets** como Application do ArgoCD (Helm, versão fixada, sync-wave baixa) + `docs` de como selar e **como fazer backup da chave do controller** (perdeu a chave, perdeu os segredos).
   ✅ *Feito:* controller via ArgoCD (chart 2.20.0), projeto `platform`, `scripts/seal-secret.sh` e `scripts/sealed-secrets-key.sh`. Testado em cluster: selar → abrir, escopo strict (outro namespace falha) e perda/restauração da chave. Ver [`docs/sealed-secrets.md`](docs/sealed-secrets.md).
-- [ ] **P3 · P0 · M — cert-manager** (Helm via ArgoCD) + `ClusterIssuer`: self-signed no local, Let's Encrypt (HTTP-01) no oracle.
-- [ ] **P4 · P0 · S — metrics-server** garantido (K3s traz; HPA depende dele — a referência já documentava isso).
+- [x] **P3 · P0 · M — cert-manager** (Helm via ArgoCD) + `ClusterIssuer`: self-signed no local, Let's Encrypt (HTTP-01) no oracle.
+  ✅ *Feito:* cert-manager v1.21.2 + `ClusterIssuer` self-signed; Ingress local com TLS (Certificate `Ready`). **Let's Encrypt fica para o oracle (fora do escopo por enquanto).** Ver [`docs/plataforma-local.md`](docs/plataforma-local.md).
+- [x] **P4 · P0 · S — metrics-server** garantido (K3s traz; HPA depende dele — a referência já documentava isso).
+  ✅ *Feito:* o K3s já traz; o HPA lê CPU real (`15%/50%`).
 - [ ] **P5 · P0 · M — App-of-apps:** root Application em `bootstrap/` → `apps/` e `platform/`; `AppProject l2` limitando repo de origem e namespaces; `sync-waves` (CRDs/plataforma → app), `SkipDryRunOnMissingResource` para CRs de CRD recém-instalada, `ignoreDifferences` em `spec.replicas` do que tiver HPA.
-- [ ] **P6 · P1 · M — Traefik (K3s) via `HelmChartConfig`:** `externalTrafficPolicy: Local` e `forwardedHeaders.trustedIPs` para preservar o IP real (GeoIP/rate limit).
+- [x] **P6 · P1 · M — Traefik (K3s) via `HelmChartConfig`:** `externalTrafficPolicy: Local` e `forwardedHeaders.trustedIPs` para preservar o IP real (GeoIP/rate limit).
+  ✅ *Feito:* `externalTrafficPolicy: Local` + `trustedIPs` privados; testado: rajada de 120 logins → IP A barrado (429), IP B passa.
 
 ### Épico A — Manifests da aplicação (`apps/l2/base`)
 

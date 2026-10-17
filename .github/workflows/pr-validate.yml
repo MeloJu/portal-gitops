@@ -61,6 +61,15 @@ jobs:
             echo "::endgroup::"
           done
 
+      # O app-of-apps referencia platform/* por caminho relativo; um caminho errado só estoura
+      # no cluster. Aqui só renderiza (os CRDs do Argo/K3s não têm schema no kubeconform).
+      - name: kustomize build do app-of-apps e da plataforma
+        run: |
+          for dir in bootstrap/apps/*/ platform/*/ platform/*/*/; do
+            [ -f "${dir}kustomization.yaml" ] || continue
+            kubectl kustomize "$dir" > /dev/null && echo "ok  ${dir}"
+          done
+
       # Sem tag latest nem imagem sem tag/digest renderizada: o bump automático existe para isso.
       - name: Imagens sem tag fixa
         run: |
@@ -88,7 +97,7 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install yamllint==1.37.1
-      - run: yamllint -c .yamllint.yaml apps bootstrap .github
+      - run: yamllint -c .yamllint.yaml apps bootstrap platform .github
 
   gitleaks:
     name: gitleaks (segredos no Git)
