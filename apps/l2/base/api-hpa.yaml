@@ -22,5 +22,13 @@ spec:
           type: Utilization
           averageUtilization: 50
   behavior:
+    # A JVM gasta CPU para subir (Spring + Flyway): sem janela, o próprio boot de um pod novo
+    # dispara outro scale-up em cascata. Só escala se a CPU ficar alta por 60 s.
+    scaleUp:
+      stabilizationWindowSeconds: 60
+      policies:
+        - type: Pods
+          value: 1
+          periodSeconds: 30
     scaleDown:
       stabilizationWindowSeconds: 60
