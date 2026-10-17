@@ -1,0 +1,21 @@
+# Segredos e estado: nunca no Git
+*.key
+*.pem
+*.mmdb
+kubeconfig*
+*.kubeconfig
+.env
+.env.*
+!.env.example
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
+crash.log
+
+# Local
+.DS_Store
+*.local.yaml

@@ -1,0 +1,55 @@
+# Uso do Claude
+
+O enunciado do hackathon prevê o Kiro como copiloto; a organização liberou o **Claude (Claude Code)**
+no lugar. Este documento registra **o que foi pedido, o que foi decidido e o que o Claude errou**,
+para o critério de uso do copiloto. É atualizado junto com o trabalho, não no fim.
+
+## Como o trabalho foi conduzido
+
+1. O Claude **lê antes de escrever**: os três repositórios (`portal-gitops` vazio, o desafio de
+   referência `k8s-postgrest-challenge` e o `portal-app` na `develop`) e o PDF do desafio.
+2. Gera um plano e **pede confirmação** das decisões que mudam o rumo.
+3. Implementa em branch de feature, **valida num cluster real** e só então abre PR.
+4. Os achados da validação voltam para o plano (`TASKS.md`) e para os comentários dos manifests.
+
+## Prompts e resultados
+
+| # | Pedido (resumo fiel) | Resultado |
+| --- | --- | --- |
+| 1 | "faz um md separando em tasks o que tem que ser feito [...] usando como base esse desafio já feito [...] segue o gitflow, ci/cd estruturado e afins" | [`TASKS.md`](../TASKS.md): épicos G/P/A/C/D/R/O/S/X/Q, prioridades, riscos. Leu o `portal-app` e descobriu o contrato do `release.yml` (caminho do overlay, nomes de imagem) |
+| 2 | Colou a arquitetura combinada (Postgres em Deployment, namespace `l2`, overlays `local`/`oracle`, SealedSecret, `/otlp`, `terraform/`) | Plano reescrito. O Claude apontou o que a arquitetura não cobria (tools-api, nome de imagem, Postgres 18, `/otlp` público, rate limit) |
+| 3 | "esses pontos que minha arquitetura não cobria você pode pensar nelas e depois faz o commit do md na develop" | Seção 3.1 do plano com seis decisões fechadas, lendo o código (limites de 60/min por IP, por pod) e commit na `develop` |
+| 4 | "a gente usaria as stacks pedidas no desafio né? se sim pode começar as tasks" | Marco M1: manifests, overlays, bootstrap do ArgoCD, scripts e CI de PR, validados em k3d (PR #1) |
+| 5 | "a gente não vai usar o OpenTelemetry?" | Esclareceu que o OTel é obrigatório e já está no plano; o Claude tinha escrito "observabilidade" onde devia dizer OpenTelemetry |
+| 6 | "nós já fizemos as Gs?" | Resposta honesta: só em parte (sem `main`, sem proteção de branch). O Claude tinha marcado G1 como feita e corrigiu |
+| 7 | "o README pega o do desafio [...] e adapta pra esse aqui" | Este README, no molde do desafio de referência, marcando 🚧 o que ainda não existe |
+
+## O que o Claude errou (e como foi pego)
+
+Registrar os erros é o ponto: o copiloto acelera, mas **a validação em cluster real e a revisão
+humana pegaram falhas que o código gerado escondia**.
+
+| Erro | Como apareceu | Correção |
+| --- | --- | --- |
+| Paths do Ingress como `/r` e `/api` | Teste ao vivo: `GET /rocket` caiu na API (401). O Traefik trata `Prefix` como prefixo de **texto**, ao contrário da spec do Kubernetes | Paths com barra final (`/r/`, `/api/`), com o motivo no comentário do manifest |
+| Primeira correção feita com `kubectl patch` | O ArgoCD (`selfHeal`) **reverteu** o patch em segundos, e o teste foi inválido | Correção só pelo Git, que é a regra do GitOps |
+| Nome de métrica `l2_links_created_total` no plano | Conferido em `/actuator/prometheus`: é `l2_links_total` | Plano corrigido |
+| Imagem da tools-api "~1,5 GB" | `docker images`: 3,5 GB | Plano corrigido |
+| Readiness da API incluindo o banco | Revisão do comportamento: um blip do Postgres derrubaria todos os pods ao mesmo tempo | Mantido o padrão do Spring (`readinessState`); o banco é checado no boot pelo Flyway |
+| `bootstrap-local.sh` assumia o kubeconfig do k3d | No Docker Desktop (Windows) o k3d grava `host.docker.internal`, inacessível | O script reescreve para `127.0.0.1` |
+| `PATH` montado com `C:/...` | `k3d` "não encontrado": o `:` do drive quebrou a lista | Caminho no formato `/c/...` |
+| G1 marcada como feita | O usuário perguntou se as Gs estavam prontas; a `main` não existia | Status corrigido para parcial |
+
+## Decisões que o Claude propôs e a equipe aceitou ou mudou
+
+- **Secret no local criado pelo script, não SealedSecret**: um SealedSecret só abre no cluster que o
+  selou, então commitar um para o cluster local não serviria aos outros membros.
+- **tools-api incluída**: o nginx do frontend não sobe se o host do upstream não resolve.
+- **Janela de 60 s no scale-up do HPA**: o boot da JVM (Spring + Flyway) gerava scale-up em cascata.
+- **Limite de viagens alto só no overlay `local`** (`APP_RATELIMIT_TRAVEL_CAPACITY`): o padrão de 60/min
+  por IP trava o loop de cliques antes de gerar CPU para o HPA. Login e cadastro ficam no padrão.
+
+## Próximas entradas
+
+Observabilidade (OpenTelemetry, Tempo, Prometheus, Grafana), overlay `oracle`, Terraform e o pipeline
+de imagens do `portal-app`: registrar aqui conforme forem feitos.

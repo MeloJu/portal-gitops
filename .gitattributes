@@ -1,0 +1,3 @@
+# Fim de linha LF sempre: scripts .sh e manifests são lidos em Linux (CI, ArgoCD).
+* text=auto eol=lf
+*.sh text eol=lf

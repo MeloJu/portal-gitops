@@ -1,0 +1,108 @@
+# tools-api: resolve links encurtados (unshorten) e faz proxy do VirusTotal. Ela busca URLs
+# arbitrárias na internet, então é o componente mais exposto a SSRF (a app valida, e a
+# NetworkPolicy de egress do marco M4 é a segunda camada).
+#
+# O resolvedor com navegador headless (BROWSER_RESOLVER) fica DESLIGADO: ligar exige um perfil
+# seccomp Localhost nos nós para o sandbox do Chromium (ver tools-api/docker/README.md no portal-app).
+apiVersion: v1
+kind: Service
+metadata:
+  name: tools-api
+  annotations:
+    # O nginx do frontend resolve este nome ao iniciar e não sobe sem ele. O Service sai antes
+    # (wave -1) para o frontend não nascer em CrashLoop esperando o DNS existir.
+    argocd.argoproj.io/sync-wave: "-1"
+  labels:
+    app.kubernetes.io/name: tools-api
+    app.kubernetes.io/part-of: l2
+spec:
+  selector:
+    app.kubernetes.io/name: tools-api
+  ports:
+    - name: http
+      port: 3001
+      targetPort: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tools-api
+  labels:
+    app.kubernetes.io/name: tools-api
+    app.kubernetes.io/part-of: l2
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: tools-api
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: tools-api
+        app.kubernetes.io/part-of: l2
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        # uid 1001 = `pwuser` da imagem do Playwright. Precisa ser numérico: com `runAsNonRoot`
+        # o kubelet recusa um USER com nome.
+        runAsNonRoot: true
+        runAsUser: 1001
+        runAsGroup: 1001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: tools-api
+          image: ghcr.io/meloju/portal-app-tools-api
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          ports:
+            - name: http
+              containerPort: 3001
+          env:
+            - name: PORT
+              value: "3001"
+            # Opcionais: sem a chave, a rota correspondente responde erro de configuração, o resto funciona.
+            - name: VT_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: l2-secrets
+                  key: VT_API_KEY
+                  optional: true
+            - name: BYPASS_API_URL
+              valueFrom:
+                secretKeyRef:
+                  name: l2-secrets
+                  key: BYPASS_API_URL
+                  optional: true
+            - name: BYPASS_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: l2-secrets
+                  key: BYPASS_API_KEY
+                  optional: true
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 384Mi
+          readinessProbe:
+            httpGet:
+              path: /tools/health
+              port: http
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /tools/health
+              port: http
+            periodSeconds: 10
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}

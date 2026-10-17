@@ -5,7 +5,9 @@ Entrega frontend, API (`l2-api`), tools-api e banco do [`portal-app`](https://gi
 adaptando o desafio de referência [`k8s-postgrest-challenge`](https://github.com/MeloJu/k8s-postgrest-challenge)
 (manifests numerados, hardening, CI com kubeconform/Checkov, smoke test em cluster efêmero, docs com evidências).
 
-> Repo de destino: `https://github.com/MeloJu/portal-gitops` (hoje **vazio**). A árvore abaixo usa o layout "l2-gitops" combinado.
+> Repo de destino: `https://github.com/MeloJu/portal-gitops`. A árvore abaixo usa o layout "l2-gitops" combinado.
+> **Copiloto de IA:** o enunciado do desafio cita o Kiro, mas a organização liberou o **Claude** no lugar. O uso é registrado em `docs/uso-do-claude.md` (critério "Uso do copiloto", 10% da nota).
+> **Status:** M1 implementado e validado em cluster k3d real (ver §7 — tasks marcadas `[x]`). Pendente: validar o app-of-apps `root` depois do merge em `develop`.
 > Legenda: **P0** = sem isso não há demo · **P1** = nota alta · **P2** = diferencial. Tamanho: **S** (<1h) · **M** (1–3h) · **L** (>3h).
 
 ---
@@ -52,7 +54,7 @@ Levantado da branch `develop` (e da `feature/release-pipeline`, ainda **não** m
 | Backend exige `DB_URL`, `DB_USER`, `DB_PASSWORD`, `PUBLIC_BASE_URL`, `JWT_SECRET` (≥256 bits, **app não sobe sem**); `SESSION_COOKIE_SECURE` (default `true`); `GEOIP_DB_PATH` opcional | ConfigMap + SealedSecret por overlay |
 | Imagem do backend já tem `USER 1001`, `-XX:MaxRAMPercentage=75`, `OTEL_SERVICE_NAME=l2-api`, agente OTel anexado mas **`OTEL_SDK_DISABLED=true`** | Gitops só precisa setar `OTEL_SDK_DISABLED=false` + `OTEL_EXPORTER_OTLP_ENDPOINT`; `readOnlyRootFilesystem` + `emptyDir` em `/tmp` |
 | `docker-compose.yml` usa **`postgres:18-alpine`**, mount em `/var/lib/postgresql` (mudança do PG 18) | Usar a mesma major no cluster e montar o PVC em `/var/lib/postgresql` (não em `/data`); UID do usuário `postgres` da variante alpine é diferente do Debian |
-| Métricas Micrometer: `l2.links.created`, `l2.travels{bot}`, `l2.threats.blocked{reason}` | Viram `l2_links_created_total`, `l2_travels_total`, `l2_threats_blocked_total` → base do dashboard de "cliques" |
+| Métricas Micrometer: `l2.links.created`, `l2.travels{bot}`, `l2.threats.blocked{reason}` | Viram `l2_links_total`, `l2_travels_total{bot}`, `l2_threats_blocked_total{reason}` (nomes conferidos em `/actuator/prometheus`) → base do dashboard de "cliques" |
 | Rate limit Bucket4j **em memória, por pod**; camada Traefik "pendente no gitops" (`SECURITY.md` §11) | Middleware Traefik aqui; com HPA o limite da app se multiplica (ver Riscos) |
 | `server.forward-headers-strategy: native` — IP real via `X-Forwarded-For` | Ingress precisa preservar o IP do cliente (GeoIP/rate limit) |
 | `release.yml` (branch não mergeada): push de tags `sha7` em `ghcr.io/meloju/portal-app-{backend,frontend,tools-api}` e **commit direto** em `portal-gitops@main`, arquivo `lumi/overlays/prod/kustomization.yaml`, `images[].newTag` via `yq`, secret `GITOPS_TOKEN` | **Layout mudou** (`apps/l2/overlays/*`): o `OVERLAY`/caminho do workflow precisa ser ajustado (X2) |
@@ -68,7 +70,7 @@ Levantado da branch `develop` (e da `feature/release-pipeline`, ainda **não** m
 | D-2 | Cluster Oracle | **K3s numa VM Ampere A1 (Free Tier)** criada por Terraform | Mais simples e barato que OKE; mesmo Traefik do local. (OKE exigiria ingress controller próprio e outra StorageClass) |
 | D-3 | Overlay ↔ branch ↔ cluster | `overlays/local` ← `develop`; `overlays/oracle` ← `main` | Preserva o gitflow: ArgoCD de cada cluster segue a sua branch |
 | D-4 | Templating | **Kustomize** na app; **Helm via ArgoCD** só na plataforma (cert-manager, sealed-secrets, observabilidade) | Casa com `images.newTag` do release |
-| D-5 | Segredos | **Sealed Secrets** (um `SealedSecret` por overlay: a chave do controller difere por cluster) | Já combinado |
+| D-5 | Segredos | **oracle: Sealed Secrets** (chave do controller é por cluster). **local: Secret criado pelo `bootstrap-local.sh` com valores aleatórios, fora do Git** (cada dev tem o seu cluster; um SealedSecret commitado não abriria no cluster dos outros). **ci: Secret descartável** | Já combinado, refinado na implementação |
 | D-6 | Traces | API com agente OTel → **Collector → Tempo**; **browser OTel JS → `/otlp` → Collector** (Ingress) | Fecha literalmente frontend → API → banco; o span do banco é o JDBC do agente |
 | D-7 | tools-api | Incluir, com `BROWSER_RESOLVER` **desligado** | Ligar exige seccomp `Localhost` nos nós (`tools-api/docker/README.md`) |
 | D-8 | Domínio/TLS | local: `l2.localhost`; oracle: `l2.<ip>.sslip.io` (ou domínio próprio) + cert-manager (Let's Encrypt) | ACME precisa de nome público; cookie `Secure` exige HTTPS fora de `localhost` |
@@ -77,7 +79,7 @@ Levantado da branch `develop` (e da `feature/release-pipeline`, ainda **não** m
 ### 3.1 Pontos que a arquitetura original não cobria — decisões fechadas
 
 **① tools-api (o nginx do frontend depende dela).**
-O `proxy_pass ${TOOLS_API_URL}` resolve o DNS **na subida do nginx**; se o nome não existir, o front nem inicia. Decisão: **incluir a tools-api** (1 réplica, `BROWSER_RESOLVER` desligado, requests pequenos). Detalhe útil: basta o **Service** existir para o nome resolver, mesmo com o pod da tools-api fora do ar — o front sobe e só `/tools/*` devolve 502. Por isso o Service `tools-api` entra em sync-wave **antes** do frontend. A imagem Playwright é grande (~1,5 GB): primeiro pull é lento, então aquecer o cluster antes da demo.
+O `proxy_pass ${TOOLS_API_URL}` resolve o DNS **na subida do nginx**; se o nome não existir, o front nem inicia. Decisão: **incluir a tools-api** (1 réplica, `BROWSER_RESOLVER` desligado, requests pequenos). Detalhe útil: basta o **Service** existir para o nome resolver, mesmo com o pod da tools-api fora do ar — o front sobe e só `/tools/*` devolve 502. Por isso o Service `tools-api` entra em sync-wave **antes** do frontend. A imagem Playwright é grande (**~3,5 GB** no disco): primeiro pull é lento, então aquecer o cluster antes da demo.
 
 **② Nome de imagem e tag (uma convenção só).**
 Canônico, porque é o que o `release.yml` já publica: `ghcr.io/meloju/portal-app-{backend,frontend,tools-api}:<sha7>`. O Deployment continua chamando `l2-api` (nome de recurso ≠ nome de imagem); no Kustomize o `image:` do manifest usa o nome completo e o `images:` do overlay só troca o `newTag`.
@@ -164,13 +166,13 @@ graph LR
 
 ```
 portal-gitops/
-├── README.md                      # ideia, como rodar, como o Kiro foi usado (entregável)
+├── README.md                      # ideia, como rodar, como o Claude foi usado (entregável)
 ├── TASKS.md                       # este arquivo
 ├── .github/
 │   ├── workflows/                 # pr-validate.yml, smoke-e2e.yml
 │   ├── CODEOWNERS
 │   └── pull_request_template.md
-├── .kiro/                         # steering, specs e hooks (uso do Kiro é avaliado)
+├── CLAUDE.md                      # contexto do projeto para o copiloto (uso do copiloto é avaliado)
 ├── apps/l2/
 │   ├── base/                      # manifests do desafio adaptados
 │   │   ├── namespace.yaml  postgres.yaml  postgres-pvc.yaml
@@ -185,7 +187,7 @@ portal-gitops/
 ├── terraform/                     # Oracle Cloud: rede, VM, K3s
 ├── scripts/                       # bootstrap-local.sh, demo-load.sh, check-config-secrets.sh
 ├── tests/                         # smoke pytest (como na referência)
-└── docs/                          # ci-cd.md, hardening.md, observabilidade.md, kiro.md, evidencias/
+└── docs/                          # ci-cd.md, hardening.md, observabilidade.md, uso-do-claude.md, evidencias/
 ```
 
 ## 6. Gitflow deste repositório
@@ -210,14 +212,16 @@ main      ← Oracle (ArgoCD lê main → overlays/oracle)
 
 - [ ] **G1 · P0 · S — Inicializar o repo.** Criar `main` com README mínimo + `.gitignore` (nada de `*.key`, `*.mmdb`, `*.tfstate`, `*.tfvars`, Secret em claro) e derivar `develop` (branch padrão).
   *Pronto quando:* as duas branches existem.
+  ◐ *Parcial:* `develop` criada e é a padrão; **falta criar `main`** (depois do merge do PR #1).
 - [ ] **G2 · P0 · S — Proteção de branches.** `main`/`develop`: PR + status checks (C1, C2), sem push direto. **Bypass só para a identidade do bot de release** (D2).
 - [ ] **G3 · P1 · S — `CODEOWNERS`, template de PR, convenção de commit/branch** no README.
-- [ ] **G4 · P1 · S — `.kiro/steering`** (produto: Lumi/Travessia/Portal; tecnologia: K3s, Kustomize, ArgoCD; estrutura: árvore acima). Criar `docs/kiro.md` já agora e **registrar cada prompt/decisão conforme acontece** (10% da nota).
+- [ ] **G4 · P1 · S — `CLAUDE.md`** na raiz (produto: Lumi/Travessia/Portal; tecnologia: K3s, Kustomize, ArgoCD; estrutura: árvore acima; regras: Secret nunca em claro, paths do Ingress com `/` final, mudança só via Git). Criar `docs/uso-do-claude.md` já agora e **registrar cada prompt/decisão conforme acontece** (10% da nota).
 
 ### Épico P — Plataforma (`platform/` + `bootstrap/`)
 
-- [ ] **P1 · P0 · M — `scripts/bootstrap-local.sh` idempotente:** cria cluster k3d (80/443 mapeadas), instala ArgoCD e aplica a *root Application* (app-of-apps). Estilo do `setup.sh` da referência.
+- [x] **P1 · P0 · M — `scripts/bootstrap-local.sh` idempotente:** cria cluster k3d (80/443 mapeadas), instala ArgoCD e aplica a *root Application* (app-of-apps). Estilo do `setup.sh` da referência.
   *Pronto quando:* script em máquina limpa deixa o ArgoCD puxando este repo.
+  ✅ *Feito:* cluster k3d + ArgoCD + Secret + app-of-apps; testado do zero.
 - [ ] **P2 · P0 · M — Sealed Secrets** como Application do ArgoCD (Helm, versão fixada, sync-wave baixa) + `docs` de como selar e **como fazer backup da chave do controller** (perdeu a chave, perdeu os segredos).
 - [ ] **P3 · P0 · M — cert-manager** (Helm via ArgoCD) + `ClusterIssuer`: self-signed no local, Let's Encrypt (HTTP-01) no oracle.
 - [ ] **P4 · P0 · S — metrics-server** garantido (K3s traz; HPA depende dele — a referência já documentava isso).
@@ -228,22 +232,25 @@ main      ← Oracle (ArgoCD lê main → overlays/oracle)
 
 Estética da referência: labels `app.kubernetes.io/*`, comentário explicando o *porquê*, `securityContext` completo, `startupProbe`.
 
-- [ ] **A1 · P0 · S — `namespace.yaml`** `l2`, com labels de Pod Security (`enforce: restricted`; ver S1).
-- [ ] **A2 · P0 · M — Postgres** (detalhes em §3.1 ③): `postgres.yaml` (Deployment **`strategy: Recreate`**, 1 réplica, `postgres:18-alpine` por digest, UID/fsGroup 70), `postgres-pvc.yaml` (`ReadWriteOnce`, **sem `storageClassName` na base** — cada overlay define), Service `postgres:5432`, probes `pg_isready`, `startupProbe`, `readOnlyRootFilesystem` + `emptyDir` em `/tmp` e `/var/run/postgresql`, PVC em `/var/lib/postgresql`.
+- [x] **A1 · P0 · S — `namespace.yaml`** `l2`, com labels de Pod Security (`enforce: restricted`; ver S1).
+- [x] **A2 · P0 · M — Postgres** (detalhes em §3.1 ③): `postgres.yaml` (Deployment **`strategy: Recreate`**, 1 réplica, `postgres:18-alpine` por digest, UID/fsGroup 70), `postgres-pvc.yaml` (`ReadWriteOnce`, **sem `storageClassName` na base** — cada overlay define), Service `postgres:5432`, probes `pg_isready`, `startupProbe`, `readOnlyRootFilesystem` + `emptyDir` em `/tmp` e `/var/run/postgresql`, PVC em `/var/lib/postgresql`.
   - DB `l2`; **role `l2_app` sem superuser**, dona do banco, criada por script em ConfigMap (`SECURITY.md` §9).
   - Senhas via arquivo montado do Secret (`POSTGRES_PASSWORD_FILE` e `/run/secrets/l2/app-password`), como na referência.
   *Pronto quando:* matar o pod do Postgres mantém os dados e o rollout não trava.
+  ✅ *Feito:* validado: dados sobrevivem a deletar o pod; `l2_app` não é superuser e é dona de `l2`.
 - [ ] **A3 · P0 · M — `configmap.yaml` + `sealed-secret.yaml`:** ConfigMap com `DB_URL=jdbc:postgresql://postgres:5432/l2`, `PUBLIC_BASE_URL`, `SESSION_COOKIE_SECURE`, `OTEL_*`. SealedSecret com `DB_USER`, `DB_PASSWORD`, `JWT_SECRET` (≥256 bits), senha do superuser. `*.example.yaml` documenta as chaves sem valores.
-- [ ] **A4 · P0 · M — `api.yaml` (`l2-api`):** Deployment + Service 8080 (+ porta 8081 só interna):
+- [x] **A4 · P0 · M — `api.yaml` (`l2-api`):** Deployment + Service 8080 (+ porta 8081 só interna):
   - imagem por `images:` do overlay, porta 8080;
   - **liveness/readiness em `/actuator/health/liveness|readiness` na 8081 + `startupProbe` generosa** (Spring + Flyway);
   - **requests 512Mi / limits 768Mi**, CPU requests definidos (necessário para o HPA);
   - `runAsUser: 1001`, `readOnlyRootFilesystem`, `emptyDir` em `/tmp`, `drop ALL`, `seccomp: RuntimeDefault`;
   - env: `DB_*` (`DB_USER=l2_app`), `JWT_SECRET` (do SealedSecret), `PUBLIC_BASE_URL`, `OTEL_SERVICE_NAME`, `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_SDK_DISABLED=false`, `MANAGEMENT_ENDPOINT_HEALTH_PROBES_ENABLED=true`;
   - rate limit no ConfigMap do overlay de demo: `APP_RATELIMIT_TRAVEL_CAPACITY` alto, `LOGIN`/`REGISTER` no padrão (§3.1 ⑤).
-- [ ] **A5 · P1 · S — `api-hpa.yaml`:** CPU 50%, min 2/max 4–6, `behavior.scaleDown` como na referência. É o gancho de demo: loop de cliques → API escala no Grafana.
-- [ ] **A6 · P0 · M — `frontend.yaml`:** Deployment + Service 8080, `TOOLS_API_URL=http://tools-api:3001`, probe em `/healthz`, `readOnlyRootFilesystem` **com `emptyDir` em `/etc/nginx/conf.d` e `/tmp`** (o entrypoint renderiza o template ali).
-- [ ] **A7 · P0 · M — `tools-api.yaml`** (§3.1 ①; Service em sync-wave **antes** do frontend): Deployment + Service 3001; `VT_API_KEY`/`BYPASS_*` opcionais via SealedSecret; `BROWSER_RESOLVER` vazio; `runAsUser` numérico do `pwuser` (conferir na imagem) para passar em PSA `restricted`. Acesso à internet é necessário (ela resolve URLs) — ver S2.
+  ✅ *Feito:* validado: Flyway migra, sobe em ~40 s dentro da `startupProbe`.
+- [x] **A5 · P1 · S — `api-hpa.yaml`:** CPU 50%, min 2/max 4–6, `behavior.scaleDown` como na referência. É o gancho de demo: loop de cliques → API escala no Grafana.
+  ✅ *Feito:* validado com metrics-server (CPU real); janela de scale-up evita cascata na partida da JVM.
+- [x] **A6 · P0 · M — `frontend.yaml`:** Deployment + Service 8080, `TOOLS_API_URL=http://tools-api:3001`, probe em `/healthz`, `readOnlyRootFilesystem` **com `emptyDir` em `/etc/nginx/conf.d` e `/tmp`** (o entrypoint renderiza o template ali).
+- [x] **A7 · P0 · M — `tools-api.yaml`** (§3.1 ①; Service em sync-wave **antes** do frontend): Deployment + Service 3001; `VT_API_KEY`/`BYPASS_*` opcionais via SealedSecret; `BROWSER_RESOLVER` vazio; `runAsUser` numérico do `pwuser` (conferir na imagem) para passar em PSA `restricted`. Acesso à internet é necessário (ela resolve URLs) — ver S2.
 - [ ] **A8 · P0 · M — `ingress.yaml`:** host único; `/` → frontend; `/api` e `/r` → API:8080; **`/otlp` → Collector:4318** (OTLP/HTTP); **sem rota para 8081**; redirect HTTP→HTTPS; TLS via cert-manager.
   `/otlp` segue §3.1 ④: só `POST /otlp/v1/traces`, `StripPrefix` → `RateLimit` por IP → `Buffering` (1 MiB), tudo em `Middleware`/`IngressRoute` do Traefik.
 - [ ] **A9 · P1 · S — Middleware Traefik `RateLimit`** grosso/alto nas rotas da API (complementa o Bucket4j — `SECURITY.md` §11a) + headers de segurança.
@@ -322,14 +329,14 @@ Helm via ArgoCD em `platform/observability/`.
 - [ ] **X4 · P1 · L — OTel no browser** (`@opentelemetry/sdk-trace-web` + fetch instrumentation), exportando OTLP/HTTP para `/otlp` (mesma origem, sem CORS) e propagando `traceparent` no `api/client.ts`.
 - [ ] **X5 · P2 · S — Seed de demo:** usuário e links de exemplo (ou script).
 
-### Épico Q — Docs, Kiro e pitch (entregáveis)
+### Épico Q — Docs, uso do Claude e pitch (entregáveis)
 
-- [ ] **Q1 · P0 · M — README** (ideia do portal Lumi, arquitetura, como rodar, como o Kiro foi usado) — entregável obrigatório.
-- [ ] **Q2 · P0 · M — `docs/kiro.md`:** prompts, o que o Kiro gerou, o que foi corrigido à mão e por quê. **Registre durante, não no fim.**
+- [ ] **Q1 · P0 · M — README** (ideia do portal Lumi, arquitetura, como rodar, como o Claude foi usado) — entregável obrigatório.
+- [ ] **Q2 · P0 · M — `docs/uso-do-claude.md`:** prompts, o que o Claude gerou, o que foi corrigido à mão e por quê. **Registre durante, não no fim.**
 - [ ] **Q3 · P1 · M — `docs/ci-cd.md`** (como o da referência: o que cada workflow faz, soft vs. hard-fail e **um "caso real"** de falha que o pipeline pegou).
 - [ ] **Q4 · P1 · S — `docs/evidencias/`** com prints (ArgoCD synced, pipeline verde, Grafana, trace atravessando, HPA escalando) + `capturar.sh`.
 - [ ] **Q5 · P0 · M — `scripts/demo-load.sh`:** cria usuário e links e dispara `/r/{code}` em loop (modo **`cliques`**, com `TRAVEL` alto no overlay de demo para o HPA escalar) e um modo **`ameaca`** com rajada de `POST /api/auth/login` (limite padrão de 60/min por IP) para encher o painel de Ameaças `RATE_LIMIT`. Ver §3.1 ⑤.
-- [ ] **Q6 · P1 · M — Roteiro do pitch (15 min):** 3 min portal/personagem · 8 min demo (criar link → cliques → Grafana subindo + HPA escalando → trace browser→API→DB) · 2 min pipeline (Actions → ArgoCD) e Kiro · 2 min perguntas. Ensaiar com o cluster **já aquecido**.
+- [ ] **Q6 · P1 · M — Roteiro do pitch (15 min):** 3 min portal/personagem · 8 min demo (criar link → cliques → Grafana subindo + HPA escalando → trace browser→API→DB) · 2 min pipeline (Actions → ArgoCD) e uso do Claude · 2 min perguntas. Ensaiar com o cluster **já aquecido**.
 
 ---
 
@@ -341,7 +348,7 @@ Helm via ArgoCD em `platform/observability/`.
 | **M2 — Esteira + GitOps** (etapa 3) | P2–P5, C1, D1–D2, D4, X1–X2 | Commit no Git → ArgoCD aplica sozinho; merge no `portal-app` troca a tag e o cluster atualiza |
 | **M3 — Observabilidade** (etapa 4) | O1–O7, A5, X3 | Dashboard reagindo ao `demo-load.sh`, HPA escalando, trace da API no Tempo |
 | **M4 — Cloud e robustez** | T1–T3, A10 (oracle), S1–S3, C2, D3 | Mesma app na Oracle via ArgoCD; smoke e2e no kind; pods passam em PSA `restricted` |
-| **M5 — Alma e pitch** (etapa 5) | O8/X4, Q1–Q6, + P2 que sobrar | Trace browser→API→DB, README, `kiro.md`, evidências, roteiro ensaiado |
+| **M5 — Alma e pitch** (etapa 5) | O8/X4, Q1–Q6, + P2 que sobrar | Trace browser→API→DB, README, `uso-do-claude.md`, evidências, roteiro ensaiado |
 
 **Caminho crítico:** G1 → P1 → A1–A4/A6/A7 → A8 → P5 → X1/X2/D1 → O1–O7. Se o tempo apertar, cortar **P2** e depois os **P1** de S/C/T antes de qualquer **P0**. Terraform/Oracle é bônus: o `local` precisa estar impecável primeiro.
 
@@ -362,6 +369,12 @@ Helm via ArgoCD em `platform/observability/`.
 - **Cookie `Secure`** em HTTP: login "não funciona" fora de `localhost` sem TLS. `SESSION_COOKIE_SECURE=false` só no overlay `local`, **nunca** no `oracle`.
 - **`/otlp` é endpoint público de escrita:** exige rate limit e limite de body (A8); senão vira vetor de abuso/DoS do Collector.
 - **SealedSecret é por cluster:** o secret do `local` não abre no `oracle`; gerar um por overlay e fazer backup da chave (P2).
+- **Traefik `Prefix` casa por texto, não por segmento** *(descoberto na implementação)*: com `/r`, o link curto `rocket`/`reuniao` ia para a API. Os paths do Ingress terminam em `/` (`/r/`, `/api/`) — testado: `/rocket`, `/reuniao`, `/apixyz` → frontend; `/r/<code>` → 302. Qualquer rota nova (`/otlp`) deve seguir a mesma regra.
+- **k3d no Docker Desktop (Windows/macOS)** grava o kubeconfig com `host.docker.internal`, que pode resolver para o IP da LAN e ficar inacessível. O `bootstrap-local.sh` reescreve para `127.0.0.1`.
+- **Fim de linha:** `core.autocrlf` do Windows quebraria os `.sh` no Linux; `.gitattributes` força LF.
+- **Condição de corrida AppProject × Application:** a Application falhava com "project does not exist" por ~3 min; resolvido com `sync-wave: -1` no AppProject.
+- **ArgoCD `selfHeal` reverte `kubectl patch` manual** (confirmado). Correções vão pelo Git.
+- **HPA e boot da JVM:** a CPU do boot dispara scale-up em cascata; `behavior.scaleUp` com janela de 60 s.
 - **`readOnlyRootFilesystem` no nginx** quebra o boot sem `emptyDir` em `/etc/nginx/conf.d` e `/tmp` (A6).
 - **CRDs antes das CRs** (cert-manager, ServiceMonitor, SealedSecret): primeiro sync falha sem sync-waves (P5).
 - **NetworkPolicy no `kind`** não é aplicada: a prova real é no k3d/K3s.
@@ -375,5 +388,5 @@ Helm via ArgoCD em `platform/observability/`.
 - [ ] Frontend, API e banco **rodando no cluster, entregues via ArgoCD**
 - [ ] Dashboard Grafana + traces OpenTelemetry demonstráveis ao vivo
 - [ ] Personagem (Lumi), identidade e features exclusivas apresentadas
-- [ ] README: ideia, como rodar, como o Kiro foi usado (`docs/kiro.md`)
+- [ ] README: ideia, como rodar, como o Claude foi usado (`docs/uso-do-claude.md`)
 - [ ] Pitch de 15 min ensaiado com `demo-load.sh`
