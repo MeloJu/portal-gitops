@@ -24,6 +24,8 @@ para o critério de uso do copiloto. É atualizado junto com o trabalho, não no
 | 6 | "nós já fizemos as Gs?" | Resposta honesta: só em parte (sem `main`, sem proteção de branch). O Claude tinha marcado G1 como feita e corrigiu |
 | 7 | "o README pega o do desafio [...] e adapta pra esse aqui" | Este README, no molde do desafio de referência, marcando 🚧 o que ainda não existe |
 | 8 | "podemos continuar com as Gs, depois a gente faz as Ps" | Governança: `main`, proteção de branch, `CODEOWNERS`, template de PR, `CLAUDE.md` e um check de gitflow no CI |
+| 9 | "adiciona esse André e Eduardo como code owner" (com print da lista de colaboradores) | O Claude leu os usuários no print (`drezix`, `eduardoberlink`) e **confirmou pela API** que ambos têm escrita antes de os pôr no `CODEOWNERS` |
+| 10 | "sim pode, e depois pode ir para a próxima task" | README com a equipe; validação do app-of-apps `root` depois do merge do PR #1; task P2 (Sealed Secrets) |
 
 ## O que o Claude errou (e como foi pego)
 
@@ -39,6 +41,9 @@ humana pegaram falhas que o código gerado escondia**.
 | Readiness da API incluindo o banco | Revisão do comportamento: um blip do Postgres derrubaria todos os pods ao mesmo tempo | Mantido o padrão do Spring (`readinessState`); o banco é checado no boot pelo Flyway |
 | `bootstrap-local.sh` assumia o kubeconfig do k3d | No Docker Desktop (Windows) o k3d grava `host.docker.internal`, inacessível | O script reescreve para `127.0.0.1` |
 | `PATH` montado com `C:/...` | `k3d` "não encontrado": o `:` do drive quebrou a lista | Caminho no formato `/c/...` |
+| URL do repositório Helm do Sealed Secrets (`bitnami-labs.github.io`) | `curl` deu 404 ao buscar a versão do chart; o README upstream mostra `bitnami.github.io` | Repo e versão (2.20.0) conferidos no `index.yaml` antes de fixar |
+| `kubectl apply -f <(git show ...)` | No Windows, a substituição de processo vira `/proc/.../fd` e falha | Aplicar do arquivo do working tree (verificado idêntico ao da `develop` com `git diff`) |
+| PR empilhado sem CI | O workflow só dispara para PRs que miram `main`/`develop`; o #2 (base = branch de feature) ficou sem checks | Anotado no PR; depois do retarget os 5 checks passaram |
 | G1 marcada como feita | O usuário perguntou se as Gs estavam prontas; a `main` não existia | Status corrigido para parcial |
 
 ## Decisões que o Claude propôs e a equipe aceitou ou mudou
