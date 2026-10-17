@@ -19,3 +19,7 @@ crash.log
 # Local
 .DS_Store
 *.local.yaml
+
+# Chave privada do Sealed Secrets (backup): jamais no Git
+sealed-secrets-key*
+*-key-backup*.yaml

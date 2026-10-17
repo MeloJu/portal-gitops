@@ -3,4 +3,7 @@ kind: Kustomization
 
 resources:
   - project.yaml
+  - project-platform.yaml
+  # Camada de plataforma compartilhada (o cluster oracle usa as mesmas Applications).
+  - ../../../platform/sealed-secrets
   - l2.yaml
