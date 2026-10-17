@@ -1,0 +1,15 @@
+# Sem storageClassName de propósito: cada overlay decide (local-path no k3d, volume da
+# Oracle no oracle). Omitir usa a StorageClass padrão do cluster.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-pvc
+  labels:
+    app.kubernetes.io/name: postgres
+    app.kubernetes.io/part-of: l2
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 2Gi

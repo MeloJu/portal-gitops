@@ -1,0 +1,57 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Cluster local (k3d). O ArgoCD do cluster local segue a branch `develop`.
+namespace: l2
+
+resources:
+  - ../../base
+
+# O Secret `l2-secrets` é criado por scripts/bootstrap-local.sh (valores aleatórios, fora do
+# Git): cada dev tem o seu cluster, e um SealedSecret só abre no cluster que o selou.
+
+# Bump automático (portal-app -> este arquivo) edita só o bloco `images`.
+# `sha-pending` é o placeholder até a primeira publicação; scripts/load-local-images.sh
+# constrói as imagens de um checkout local do portal-app com essa tag.
+images:
+  - name: ghcr.io/meloju/portal-app-backend
+    newTag: sha-pending
+  - name: ghcr.io/meloju/portal-app-frontend
+    newTag: sha-pending
+  - name: ghcr.io/meloju/portal-app-tools-api
+    newTag: sha-pending
+
+patches:
+  - target:
+      kind: ConfigMap
+      name: l2-config
+    patch: |-
+      - op: replace
+        path: /data/PUBLIC_BASE_URL
+        value: http://l2.localhost
+      # Sem TLS no local: o cookie Secure não voltaria por HTTP. NUNCA no overlay oracle.
+      - op: replace
+        path: /data/SESSION_COOKIE_SECURE
+        value: "false"
+      # Demo: o limite padrão (60 viagens/min por IP) trava o loop de cliques antes de gerar
+      # CPU para o HPA. Login e cadastro continuam no padrão para a cena de "ameaça bloqueada".
+      - op: add
+        path: /data/APP_RATELIMIT_TRAVEL_CAPACITY
+        value: "6000"
+  - target:
+      kind: Ingress
+      name: l2
+    patch: |-
+      - op: add
+        path: /spec/rules/0/host
+        value: l2.localhost
+  - target:
+      kind: HorizontalPodAutoscaler
+      name: l2-api
+    patch: |-
+      - op: replace
+        path: /spec/minReplicas
+        value: 1
+      - op: replace
+        path: /spec/maxReplicas
+        value: 3

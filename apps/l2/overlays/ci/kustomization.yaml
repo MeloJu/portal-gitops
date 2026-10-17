@@ -1,0 +1,48 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Overlay do smoke test em cluster efêmero (kind). Sem Ingress, sem HPA (o kind não tem
+# metrics-server) e com um Secret descartável: o SealedSecret só abre no cluster dono da chave.
+namespace: l2
+
+resources:
+  - ../../base
+  - secret.yaml
+
+images:
+  - name: ghcr.io/meloju/portal-app-backend
+    newTag: sha-pending
+  - name: ghcr.io/meloju/portal-app-frontend
+    newTag: sha-pending
+  - name: ghcr.io/meloju/portal-app-tools-api
+    newTag: sha-pending
+
+patches:
+  - target:
+      kind: ConfigMap
+      name: l2-config
+    patch: |-
+      - op: replace
+        path: /data/PUBLIC_BASE_URL
+        value: http://localhost
+      - op: replace
+        path: /data/SESSION_COOKIE_SECURE
+        value: "false"
+  - target:
+      kind: Ingress
+      name: l2
+    patch: |-
+      $patch: delete
+      apiVersion: networking.k8s.io/v1
+      kind: Ingress
+      metadata:
+        name: l2
+  - target:
+      kind: HorizontalPodAutoscaler
+      name: l2-api
+    patch: |-
+      $patch: delete
+      apiVersion: autoscaling/v2
+      kind: HorizontalPodAutoscaler
+      metadata:
+        name: l2-api

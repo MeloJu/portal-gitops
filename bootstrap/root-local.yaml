@@ -1,0 +1,24 @@
+# App-of-apps do cluster local: a única Application criada à mão. Ela sincroniza
+# bootstrap/apps/local, que declara o AppProject e as Applications filhas (app l2 e, nos
+# próximos marcos, a plataforma: cert-manager, observabilidade...).
+# O cluster local segue a branch `develop`.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: root
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/MeloJu/portal-gitops.git
+    targetRevision: develop
+    path: bootstrap/apps/local
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true

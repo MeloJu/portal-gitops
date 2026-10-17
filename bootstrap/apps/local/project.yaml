@@ -1,0 +1,18 @@
+# Limita o que as Applications deste projeto podem fazer: só este repositório como origem
+# e só os namespaces da aplicação como destino.
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: l2
+  namespace: argocd
+spec:
+  description: Lumi Links (l2)
+  sourceRepos:
+    - https://github.com/MeloJu/portal-gitops.git
+  destinations:
+    - server: https://kubernetes.default.svc
+      namespace: l2
+  # O Namespace `l2` vem dos manifests (com labels de Pod Security); é o único recurso de cluster permitido.
+  clusterResourceWhitelist:
+    - group: ""
+      kind: Namespace

@@ -1,0 +1,9 @@
+# Usa as regras padrão do gitleaks e libera só o que é descartável por definição.
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Secret descartável do smoke test (kind efêmero); nunca é usado fora do CI"
+paths = [
+  '''apps/l2/overlays/ci/secret\.yaml''',
+]

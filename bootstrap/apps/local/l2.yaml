@@ -1,0 +1,29 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: l2-local
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: l2
+  source:
+    repoURL: https://github.com/MeloJu/portal-gitops.git
+    targetRevision: develop
+    path: apps/l2/overlays/local
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: l2
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - ServerSideApply=true
+  # O HPA é quem decide as réplicas da API; o Argo não deve brigar com ele.
+  ignoreDifferences:
+    - group: apps
+      kind: Deployment
+      name: l2-api
+      jsonPointers:
+        - /spec/replicas

@@ -1,0 +1,26 @@
+# Escala a API por CPU: o loop de cliques da demo faz as réplicas subirem ao vivo no Grafana.
+# Depende do metrics-server (o K3s já traz). Sem ele o HPA fica em <unknown> e não escala.
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: l2-api
+  labels:
+    app.kubernetes.io/name: l2-api
+    app.kubernetes.io/part-of: l2
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: l2-api
+  minReplicas: 2
+  maxReplicas: 4
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 50
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 60
