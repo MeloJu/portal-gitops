@@ -23,6 +23,7 @@ para o critério de uso do copiloto. É atualizado junto com o trabalho, não no
 | 5 | "a gente não vai usar o OpenTelemetry?" | Esclareceu que o OTel é obrigatório e já está no plano; o Claude tinha escrito "observabilidade" onde devia dizer OpenTelemetry |
 | 6 | "nós já fizemos as Gs?" | Resposta honesta: só em parte (sem `main`, sem proteção de branch). O Claude tinha marcado G1 como feita e corrigiu |
 | 7 | "o README pega o do desafio [...] e adapta pra esse aqui" | Este README, no molde do desafio de referência, marcando 🚧 o que ainda não existe |
+| 8 | "podemos continuar com as Gs, depois a gente faz as Ps" | Governança: `main`, proteção de branch, `CODEOWNERS`, template de PR, `CLAUDE.md` e um check de gitflow no CI |
 
 ## O que o Claude errou (e como foi pego)
 

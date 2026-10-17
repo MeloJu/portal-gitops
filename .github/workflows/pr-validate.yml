@@ -16,6 +16,32 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  gitflow:
+    name: Gitflow (origem do PR)
+    # Só faz sentido em pull request; no push o job é pulado (e um check pulado conta como verde).
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      # head_ref/base_ref entram por env: nunca interpolar nome de branch direto no script.
+      - name: Origem permitida para a branch de destino
+        env:
+          HEAD: ${{ github.head_ref }}
+          BASE: ${{ github.base_ref }}
+        run: |
+          case "$BASE" in
+            main)
+              # produção: só o que já passou pela integração, ou uma correção urgente
+              [[ "$HEAD" == "develop" || "$HEAD" =~ ^(release|hotfix)/ ]] ||
+                { echo "::error::PR para main só vem de develop, release/* ou hotfix/* (veio de '$HEAD')"; exit 1; }
+              ;;
+            develop)
+              [[ "$HEAD" == "main" || "$HEAD" =~ ^(feature|fix|chore|docs|refactor|release|hotfix)/ ]] ||
+                { echo "::error::branch '$HEAD' fora do padrão: use feature/*, fix/*, chore/*, docs/* ou refactor/*"; exit 1; }
+              ;;
+          esac
+          echo "ok: $HEAD -> $BASE"
+
   render:
     name: kustomize build + kubeconform
     runs-on: ubuntu-latest

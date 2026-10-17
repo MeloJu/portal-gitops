@@ -1,0 +1,9 @@
+# Quem revisa o quê. Com a proteção de branch, o PR só entra com o aval do dono do caminho
+# (se a regra "exigir revisão de code owners" estiver ligada). Acrescente os integrantes da equipe.
+*                    @MeloJu
+
+# Segredos, CI e entrega: qualquer mudança aqui é revisada com atenção extra.
+/.github/            @MeloJu
+/apps/l2/overlays/   @MeloJu
+/bootstrap/          @MeloJu
+/terraform/          @MeloJu

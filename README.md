@@ -252,13 +252,28 @@ portal-gitops/
 
 ## 🔀 GitFlow
 
-`main` (produção, overlay `oracle`), `develop` (integração, overlay `local`) e uma branch
-`feature/*`, `fix/*` ou `chore/*` por entrega, cada uma com o seu PR.
+```text
+main      ← produção (overlay oracle)
+ └── develop   ← integração (overlay local)
+      ├── feature/*  fix/*  chore/*  docs/*  refactor/*
+      ├── release/*   (congela e valida antes de ir para main)
+      └── hotfix/*    (sai da main; volta para main e develop)
+```
 
-- PR obrigatório para `develop` e `main`; commits em *Conventional Commits*.
-- O bump automático de tag toca **só** `apps/l2/overlays/<env>/kustomization.yaml`: o `local` no
-  `develop`, o `oracle` no `main`. Arquivos diferentes, então os merges não conflitam.
-- Cada PR descreve o raciocínio e como foi validado.
+| Regra | Como é imposta |
+| --- | --- |
+| Nada de push direto em `main` e `develop` | Proteção de branch no GitHub (administradores conseguem contornar: é o que permite o bot de release fazer o bump) |
+| PR só entra com os checks verdes | `pr-validate` exigido: kustomize + kubeconform, yamllint, gitleaks e *Nenhum Secret em claro*. O *Gitflow* roda em todo PR e passa a ser exigido depois do merge que o introduz |
+| `main` só recebe `develop`, `release/*` ou `hotfix/*` | Job *Gitflow (origem do PR)* do `pr-validate` |
+| Nome de branch fora do padrão é recusado | O mesmo job |
+| Conversas do PR resolvidas antes do merge | Proteção de branch |
+| Revisão por dono do caminho | [`.github/CODEOWNERS`](.github/CODEOWNERS) |
+
+- **Commits** em *Conventional Commits*: `feat(escopo):`, `fix(escopo):`, `docs:`, `chore(release): portal-app <sha7>`.
+- Cada PR usa o [template](.github/pull_request_template.md) e diz **como foi validado**, com o comando e o que se viu.
+- O bump automático de tag (CI do `portal-app`) toca **só** `apps/l2/overlays/<env>/kustomization.yaml`: o `local` no
+  `develop`, o `oracle` no `main`. Arquivos diferentes, então os merges não conflitam. O token do bot
+  é de administrador, que **não** é barrado pela proteção (`enforce_admins` desligado de propósito).
 
 ## 🤖 Como o Claude foi usado
 
