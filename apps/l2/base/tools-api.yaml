@@ -8,6 +8,10 @@ apiVersion: v1
 kind: Service
 metadata:
   name: tools-api
+  annotations:
+    # O nginx do frontend resolve este nome ao iniciar e não sobe sem ele. O Service sai antes
+    # (wave -1) para o frontend não nascer em CrashLoop esperando o DNS existir.
+    argocd.argoproj.io/sync-wave: "-1"
   labels:
     app.kubernetes.io/name: tools-api
     app.kubernetes.io/part-of: l2
