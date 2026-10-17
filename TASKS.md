@@ -5,7 +5,8 @@ Entrega frontend, API (`l2-api`), tools-api e banco do [`portal-app`](https://gi
 adaptando o desafio de referência [`k8s-postgrest-challenge`](https://github.com/MeloJu/k8s-postgrest-challenge)
 (manifests numerados, hardening, CI com kubeconform/Checkov, smoke test em cluster efêmero, docs com evidências).
 
-> Repo de destino: `https://github.com/MeloJu/portal-gitops` (hoje **vazio**). A árvore abaixo usa o layout "l2-gitops" combinado.
+> Repo de destino: `https://github.com/MeloJu/portal-gitops`. A árvore abaixo usa o layout "l2-gitops" combinado.
+> **Copiloto de IA:** o enunciado do desafio cita o Kiro, mas a organização liberou o **Claude** no lugar. O uso é registrado em `docs/uso-do-claude.md` (critério "Uso do copiloto", 10% da nota).
 > **Status:** M1 implementado e validado em cluster k3d real (ver §7 — tasks marcadas `[x]`). Pendente: validar o app-of-apps `root` depois do merge em `develop`.
 > Legenda: **P0** = sem isso não há demo · **P1** = nota alta · **P2** = diferencial. Tamanho: **S** (<1h) · **M** (1–3h) · **L** (>3h).
 
@@ -165,13 +166,13 @@ graph LR
 
 ```
 portal-gitops/
-├── README.md                      # ideia, como rodar, como o Kiro foi usado (entregável)
+├── README.md                      # ideia, como rodar, como o Claude foi usado (entregável)
 ├── TASKS.md                       # este arquivo
 ├── .github/
 │   ├── workflows/                 # pr-validate.yml, smoke-e2e.yml
 │   ├── CODEOWNERS
 │   └── pull_request_template.md
-├── .kiro/                         # steering, specs e hooks (uso do Kiro é avaliado)
+├── CLAUDE.md                      # contexto do projeto para o copiloto (uso do copiloto é avaliado)
 ├── apps/l2/
 │   ├── base/                      # manifests do desafio adaptados
 │   │   ├── namespace.yaml  postgres.yaml  postgres-pvc.yaml
@@ -186,7 +187,7 @@ portal-gitops/
 ├── terraform/                     # Oracle Cloud: rede, VM, K3s
 ├── scripts/                       # bootstrap-local.sh, demo-load.sh, check-config-secrets.sh
 ├── tests/                         # smoke pytest (como na referência)
-└── docs/                          # ci-cd.md, hardening.md, observabilidade.md, kiro.md, evidencias/
+└── docs/                          # ci-cd.md, hardening.md, observabilidade.md, uso-do-claude.md, evidencias/
 ```
 
 ## 6. Gitflow deste repositório
@@ -214,7 +215,7 @@ main      ← Oracle (ArgoCD lê main → overlays/oracle)
   ✅ *Feito:* `develop` criada e é a padrão; **falta criar `main`**.
 - [ ] **G2 · P0 · S — Proteção de branches.** `main`/`develop`: PR + status checks (C1, C2), sem push direto. **Bypass só para a identidade do bot de release** (D2).
 - [ ] **G3 · P1 · S — `CODEOWNERS`, template de PR, convenção de commit/branch** no README.
-- [ ] **G4 · P1 · S — `.kiro/steering`** (produto: Lumi/Travessia/Portal; tecnologia: K3s, Kustomize, ArgoCD; estrutura: árvore acima). Criar `docs/kiro.md` já agora e **registrar cada prompt/decisão conforme acontece** (10% da nota).
+- [ ] **G4 · P1 · S — `CLAUDE.md`** na raiz (produto: Lumi/Travessia/Portal; tecnologia: K3s, Kustomize, ArgoCD; estrutura: árvore acima; regras: Secret nunca em claro, paths do Ingress com `/` final, mudança só via Git). Criar `docs/uso-do-claude.md` já agora e **registrar cada prompt/decisão conforme acontece** (10% da nota).
 
 ### Épico P — Plataforma (`platform/` + `bootstrap/`)
 
@@ -328,14 +329,14 @@ Helm via ArgoCD em `platform/observability/`.
 - [ ] **X4 · P1 · L — OTel no browser** (`@opentelemetry/sdk-trace-web` + fetch instrumentation), exportando OTLP/HTTP para `/otlp` (mesma origem, sem CORS) e propagando `traceparent` no `api/client.ts`.
 - [ ] **X5 · P2 · S — Seed de demo:** usuário e links de exemplo (ou script).
 
-### Épico Q — Docs, Kiro e pitch (entregáveis)
+### Épico Q — Docs, uso do Claude e pitch (entregáveis)
 
-- [ ] **Q1 · P0 · M — README** (ideia do portal Lumi, arquitetura, como rodar, como o Kiro foi usado) — entregável obrigatório.
-- [ ] **Q2 · P0 · M — `docs/kiro.md`:** prompts, o que o Kiro gerou, o que foi corrigido à mão e por quê. **Registre durante, não no fim.**
+- [ ] **Q1 · P0 · M — README** (ideia do portal Lumi, arquitetura, como rodar, como o Claude foi usado) — entregável obrigatório.
+- [ ] **Q2 · P0 · M — `docs/uso-do-claude.md`:** prompts, o que o Claude gerou, o que foi corrigido à mão e por quê. **Registre durante, não no fim.**
 - [ ] **Q3 · P1 · M — `docs/ci-cd.md`** (como o da referência: o que cada workflow faz, soft vs. hard-fail e **um "caso real"** de falha que o pipeline pegou).
 - [ ] **Q4 · P1 · S — `docs/evidencias/`** com prints (ArgoCD synced, pipeline verde, Grafana, trace atravessando, HPA escalando) + `capturar.sh`.
 - [ ] **Q5 · P0 · M — `scripts/demo-load.sh`:** cria usuário e links e dispara `/r/{code}` em loop (modo **`cliques`**, com `TRAVEL` alto no overlay de demo para o HPA escalar) e um modo **`ameaca`** com rajada de `POST /api/auth/login` (limite padrão de 60/min por IP) para encher o painel de Ameaças `RATE_LIMIT`. Ver §3.1 ⑤.
-- [ ] **Q6 · P1 · M — Roteiro do pitch (15 min):** 3 min portal/personagem · 8 min demo (criar link → cliques → Grafana subindo + HPA escalando → trace browser→API→DB) · 2 min pipeline (Actions → ArgoCD) e Kiro · 2 min perguntas. Ensaiar com o cluster **já aquecido**.
+- [ ] **Q6 · P1 · M — Roteiro do pitch (15 min):** 3 min portal/personagem · 8 min demo (criar link → cliques → Grafana subindo + HPA escalando → trace browser→API→DB) · 2 min pipeline (Actions → ArgoCD) e uso do Claude · 2 min perguntas. Ensaiar com o cluster **já aquecido**.
 
 ---
 
@@ -347,7 +348,7 @@ Helm via ArgoCD em `platform/observability/`.
 | **M2 — Esteira + GitOps** (etapa 3) | P2–P5, C1, D1–D2, D4, X1–X2 | Commit no Git → ArgoCD aplica sozinho; merge no `portal-app` troca a tag e o cluster atualiza |
 | **M3 — Observabilidade** (etapa 4) | O1–O7, A5, X3 | Dashboard reagindo ao `demo-load.sh`, HPA escalando, trace da API no Tempo |
 | **M4 — Cloud e robustez** | T1–T3, A10 (oracle), S1–S3, C2, D3 | Mesma app na Oracle via ArgoCD; smoke e2e no kind; pods passam em PSA `restricted` |
-| **M5 — Alma e pitch** (etapa 5) | O8/X4, Q1–Q6, + P2 que sobrar | Trace browser→API→DB, README, `kiro.md`, evidências, roteiro ensaiado |
+| **M5 — Alma e pitch** (etapa 5) | O8/X4, Q1–Q6, + P2 que sobrar | Trace browser→API→DB, README, `uso-do-claude.md`, evidências, roteiro ensaiado |
 
 **Caminho crítico:** G1 → P1 → A1–A4/A6/A7 → A8 → P5 → X1/X2/D1 → O1–O7. Se o tempo apertar, cortar **P2** e depois os **P1** de S/C/T antes de qualquer **P0**. Terraform/Oracle é bônus: o `local` precisa estar impecável primeiro.
 
@@ -387,5 +388,5 @@ Helm via ArgoCD em `platform/observability/`.
 - [ ] Frontend, API e banco **rodando no cluster, entregues via ArgoCD**
 - [ ] Dashboard Grafana + traces OpenTelemetry demonstráveis ao vivo
 - [ ] Personagem (Lumi), identidade e features exclusivas apresentadas
-- [ ] README: ideia, como rodar, como o Kiro foi usado (`docs/kiro.md`)
+- [ ] README: ideia, como rodar, como o Claude foi usado (`docs/uso-do-claude.md`)
 - [ ] Pitch de 15 min ensaiado com `demo-load.sh`
