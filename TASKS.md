@@ -229,7 +229,8 @@ main      ← Oracle (ArgoCD lê main → overlays/oracle)
   ✅ *Feito:* cert-manager v1.21.2 + `ClusterIssuer` self-signed; Ingress local com TLS (Certificate `Ready`). **Let's Encrypt fica para o oracle (fora do escopo por enquanto).** Ver [`docs/plataforma-local.md`](docs/plataforma-local.md).
 - [x] **P4 · P0 · S — metrics-server** garantido (K3s traz; HPA depende dele — a referência já documentava isso).
   ✅ *Feito:* o K3s já traz; o HPA lê CPU real (`15%/50%`).
-- [ ] **P5 · P0 · M — App-of-apps:** root Application em `bootstrap/` → `apps/` e `platform/`; `AppProject l2` limitando repo de origem e namespaces; `sync-waves` (CRDs/plataforma → app), `SkipDryRunOnMissingResource` para CRs de CRD recém-instalada, `ignoreDifferences` em `spec.replicas` do que tiver HPA.
+- [x] **P5 · P0 · M — App-of-apps:** root Application em `bootstrap/` → `apps/` e `platform/`; `AppProject l2` limitando repo de origem e namespaces; `sync-waves` (CRDs/plataforma → app), `SkipDryRunOnMissingResource` para CRs de CRD recém-instalada, `ignoreDifferences` em `spec.replicas` do que tiver HPA.
+  ✅ *Feito:* `root` → `bootstrap/apps/local` (AppProjects `l2` e `platform`); sync-waves (`-2` projeto, `-1` plataforma, `0` app); `SkipDryRunOnMissingResource` no ClusterIssuer; `ignoreDifferences` em `spec.replicas` da API. Validado: o `root` adotou o `l2-local` sem reiniciar pods.
 - [x] **P6 · P1 · M — Traefik (K3s) via `HelmChartConfig`:** `externalTrafficPolicy: Local` e `forwardedHeaders.trustedIPs` para preservar o IP real (GeoIP/rate limit).
   ✅ *Feito:* `externalTrafficPolicy: Local` + `trustedIPs` privados; testado: rajada de 120 logins → IP A barrado (429), IP B passa.
 
