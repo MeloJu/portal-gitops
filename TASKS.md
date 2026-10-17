@@ -1,0 +1,379 @@
+# portal-gitops — Plano de tasks
+
+GitOps do **Lumi Links** (Portal dos Links): o repositório de manifests que o ArgoCD sincroniza para o cluster.
+Entrega frontend, API (`l2-api`), tools-api e banco do [`portal-app`](https://github.com/MeloJu/portal-app) (branch `develop`),
+adaptando o desafio de referência [`k8s-postgrest-challenge`](https://github.com/MeloJu/k8s-postgrest-challenge)
+(manifests numerados, hardening, CI com kubeconform/Checkov, smoke test em cluster efêmero, docs com evidências).
+
+> Repo de destino: `https://github.com/MeloJu/portal-gitops` (hoje **vazio**). A árvore abaixo usa o layout "l2-gitops" combinado.
+> Legenda: **P0** = sem isso não há demo · **P1** = nota alta · **P2** = diferencial. Tamanho: **S** (<1h) · **M** (1–3h) · **L** (>3h).
+
+---
+
+## 1. De desafio para hackathon (mapeamento combinado)
+
+| Nível do desafio | Vira aqui |
+| --- | --- |
+| Namespace | `namespace: l2` |
+| PostgreSQL + PVC + Service | **Deployment + PVC + Service `postgres`** (sem CloudNativePG; migrar só se sobrar tempo) |
+| ConfigMap + Secret | ConfigMap da API + **SealedSecret** (nunca Secret em claro) |
+| API pelo nome do Service | `DB_URL=jdbc:postgresql://postgres:5432/l2` |
+| Probes, requests/limits, réplicas | Deployment da `l2-api` |
+| HPA (bônus) | HPA da API — o loop de cliques faz a API escalar ao vivo no Grafana |
+| Terraform e Cloud (bônus) | pasta `terraform/` (Oracle Cloud) |
+
+**Ajustes obrigatórios em relação à referência (PostgREST → l2-api Java):**
+- Imagem `ghcr.io/<time>/l2-api:<tag>`, porta **8080**.
+- Probes em `/actuator/health/liveness` e `/readiness` na porta **8081**.
+- **`startupProbe`**: o Spring leva 10–20 s (mais o Flyway); sem ela a liveness mata o pod antes de ficar pronto.
+- Memória: **request 512Mi / limit 768Mi** + `-XX:MaxRAMPercentage=75` (a JVM com 128Mi dá OOMKill).
+- Sem criar tabela na mão: **o Flyway cria o schema** no boot.
+- Variáveis novas: `DB_*`, `JWT_SECRET`, `PUBLIC_BASE_URL`, `OTEL_SERVICE_NAME`, `OTEL_EXPORTER_OTLP_ENDPOINT`.
+- Postgres com **`strategy: Recreate`** (PVC `ReadWriteOnce`; com `RollingUpdate` o pod novo trava esperando o volume).
+- Secret **não vai para o Git em claro** (base64 não é criptografia): vira `SealedSecret`, e o `gitleaks` no CI barra o resto.
+
+**O que o desafio deixou de fora e o hackathon precisa:**
+- Deployment do **frontend** (nginx + build do Vite).
+- **Ingress**: `/` → front, `/api` e `/r` → API, `/otlp` → Collector, com TLS via cert-manager.
+- **Kustomize** (`base/` + `overlays/local` e `overlays/oracle`): resolve a troca de StorageClass e de acesso externo, e é o que o CD usa para trocar a tag da imagem.
+- **ArgoCD (app-of-apps)** + Helm da stack de observabilidade.
+
+---
+
+## 2. O que o `portal-app` já nos diz (contrato com este repo)
+
+Levantado da branch `develop` (e da `feature/release-pipeline`, ainda **não** mergeada):
+
+| Fato no `portal-app` | Consequência aqui |
+| --- | --- |
+| 3 imagens: `backend` (porta **8080**, Actuator **8081**), `frontend` (nginx-unprivileged **8080**, `/healthz`), `tools-api` (Node + Playwright, **3001**) | 3 Deployments. **A tools-api não pode ser omitida:** o nginx do frontend faz `proxy_pass ${TOOLS_API_URL}` e **o nginx não sobe se o host do upstream não resolver** (`host not found in upstream`) |
+| Front e API são **mesma origem via Ingress** (cookie `HttpOnly`+`Secure`, sem CORS); `/r/{code}` **não passa pelo nginx** | Um host só; rotas conforme item "Ingress" acima |
+| Actuator em porta separada (**8081**), "o Ingress só roteia a 8080" | Probes e scrape na 8081; Ingress **nunca** expõe 8081 |
+| Backend exige `DB_URL`, `DB_USER`, `DB_PASSWORD`, `PUBLIC_BASE_URL`, `JWT_SECRET` (≥256 bits, **app não sobe sem**); `SESSION_COOKIE_SECURE` (default `true`); `GEOIP_DB_PATH` opcional | ConfigMap + SealedSecret por overlay |
+| Imagem do backend já tem `USER 1001`, `-XX:MaxRAMPercentage=75`, `OTEL_SERVICE_NAME=l2-api`, agente OTel anexado mas **`OTEL_SDK_DISABLED=true`** | Gitops só precisa setar `OTEL_SDK_DISABLED=false` + `OTEL_EXPORTER_OTLP_ENDPOINT`; `readOnlyRootFilesystem` + `emptyDir` em `/tmp` |
+| `docker-compose.yml` usa **`postgres:18-alpine`**, mount em `/var/lib/postgresql` (mudança do PG 18) | Usar a mesma major no cluster e montar o PVC em `/var/lib/postgresql` (não em `/data`); UID do usuário `postgres` da variante alpine é diferente do Debian |
+| Métricas Micrometer: `l2.links.created`, `l2.travels{bot}`, `l2.threats.blocked{reason}` | Viram `l2_links_created_total`, `l2_travels_total`, `l2_threats_blocked_total` → base do dashboard de "cliques" |
+| Rate limit Bucket4j **em memória, por pod**; camada Traefik "pendente no gitops" (`SECURITY.md` §11) | Middleware Traefik aqui; com HPA o limite da app se multiplica (ver Riscos) |
+| `server.forward-headers-strategy: native` — IP real via `X-Forwarded-For` | Ingress precisa preservar o IP do cliente (GeoIP/rate limit) |
+| `release.yml` (branch não mergeada): push de tags `sha7` em `ghcr.io/meloju/portal-app-{backend,frontend,tools-api}` e **commit direto** em `portal-gitops@main`, arquivo `lumi/overlays/prod/kustomization.yaml`, `images[].newTag` via `yq`, secret `GITOPS_TOKEN` | **Layout mudou** (`apps/l2/overlays/*`): o `OVERLAY`/caminho do workflow precisa ser ajustado (X2) |
+| `publish-backend.yml` (já em `develop`) publica em `ghcr.io/meloju/portal-app/backend`, divergente do `release.yml` | Resolver o nome da imagem (X1) antes de apontar o Kustomize |
+
+---
+
+## 3. Decisões (defaults recomendados — confirme ou troque)
+
+| # | Decisão | Default recomendado | Por quê |
+| --- | --- | --- | --- |
+| D-1 | Cluster local | **k3d** (K3s em Docker) | Traefik embutido e NetworkPolicy **aplicada**. `kind` fica só no CI efêmero (kindnet não aplica NetworkPolicy, como a referência já notava) |
+| D-2 | Cluster Oracle | **K3s numa VM Ampere A1 (Free Tier)** criada por Terraform | Mais simples e barato que OKE; mesmo Traefik do local. (OKE exigiria ingress controller próprio e outra StorageClass) |
+| D-3 | Overlay ↔ branch ↔ cluster | `overlays/local` ← `develop`; `overlays/oracle` ← `main` | Preserva o gitflow: ArgoCD de cada cluster segue a sua branch |
+| D-4 | Templating | **Kustomize** na app; **Helm via ArgoCD** só na plataforma (cert-manager, sealed-secrets, observabilidade) | Casa com `images.newTag` do release |
+| D-5 | Segredos | **Sealed Secrets** (um `SealedSecret` por overlay: a chave do controller difere por cluster) | Já combinado |
+| D-6 | Traces | API com agente OTel → **Collector → Tempo**; **browser OTel JS → `/otlp` → Collector** (Ingress) | Fecha literalmente frontend → API → banco; o span do banco é o JDBC do agente |
+| D-7 | tools-api | Incluir, com `BROWSER_RESOLVER` **desligado** | Ligar exige seccomp `Localhost` nos nós (`tools-api/docker/README.md`) |
+| D-8 | Domínio/TLS | local: `l2.localhost`; oracle: `l2.<ip>.sslip.io` (ou domínio próprio) + cert-manager (Let's Encrypt) | ACME precisa de nome público; cookie `Secure` exige HTTPS fora de `localhost` |
+| D-9 | `overlays/ci` | Acrescentar um terceiro overlay mínimo só para o smoke no `kind` | SealedSecret não abre fora do cluster dono da chave; o CI aplica um Secret de teste |
+
+### 3.1 Pontos que a arquitetura original não cobria — decisões fechadas
+
+**① tools-api (o nginx do frontend depende dela).**
+O `proxy_pass ${TOOLS_API_URL}` resolve o DNS **na subida do nginx**; se o nome não existir, o front nem inicia. Decisão: **incluir a tools-api** (1 réplica, `BROWSER_RESOLVER` desligado, requests pequenos). Detalhe útil: basta o **Service** existir para o nome resolver, mesmo com o pod da tools-api fora do ar — o front sobe e só `/tools/*` devolve 502. Por isso o Service `tools-api` entra em sync-wave **antes** do frontend. A imagem Playwright é grande (~1,5 GB): primeiro pull é lento, então aquecer o cluster antes da demo.
+
+**② Nome de imagem e tag (uma convenção só).**
+Canônico, porque é o que o `release.yml` já publica: `ghcr.io/meloju/portal-app-{backend,frontend,tools-api}:<sha7>`. O Deployment continua chamando `l2-api` (nome de recurso ≠ nome de imagem); no Kustomize o `image:` do manifest usa o nome completo e o `images:` do overlay só troca o `newTag`.
+No `portal-app`, **um workflow só** (`images.yml`, matriz com os 3 serviços) substitui `publish-backend.yml` + `release.yml`:
+
+| Evento | Faz | Bump |
+| --- | --- | --- |
+| Pull request | build + Trivy, **sem push** | — |
+| push `develop` | build + Trivy + push | `apps/l2/overlays/local/kustomization.yaml` no branch `develop` do gitops |
+| push `main` | build + Trivy + push | `apps/l2/overlays/oracle/kustomization.yaml` no branch `main` do gitops |
+
+```bash
+# trecho do job de bump (substitui OVERLAY fixo do release.yml)
+case "$GITHUB_REF_NAME" in
+  main)    ENV=oracle; GITOPS_BRANCH=main ;;
+  develop) ENV=local;  GITOPS_BRANCH=develop ;;
+esac
+OVERLAY="apps/l2/overlays/${ENV}/kustomization.yaml"   # checkout do portal-gitops com ref: $GITOPS_BRANCH
+```
+O bump só roda se as **3** imagens foram publicadas (já é assim no `release.yml`).
+
+**③ Postgres 18-alpine, em detalhe.**
+- Imagem `postgres:18-alpine` (mesma major do `docker-compose.yml`), fixada por digest.
+- UID/GID **70** (usuário `postgres` da variante alpine; no Debian seria 999) → `runAsUser/runAsGroup/fsGroup: 70`.
+- PVC montado em **`/var/lib/postgresql`**; o PGDATA padrão passa a ser `/var/lib/postgresql/18/docker`. Não setar `PGDATA` para `/data`.
+- `strategy: Recreate`, `readOnlyRootFilesystem`, `emptyDir` em `/tmp` e `/var/run/postgresql`.
+- Dois papéis: o **superuser** (`POSTGRES_USER=postgres`, senha via `POSTGRES_PASSWORD_FILE`) só administra; a API usa **`l2_app`**, criada num script em `/docker-entrypoint-initdb.d/` (ConfigMap) que lê a senha de arquivo montado:
+  ```sh
+  psql -v ON_ERROR_STOP=1 -U postgres -d l2 <<SQL
+  CREATE ROLE l2_app LOGIN PASSWORD '$(cat /run/secrets/l2/app-password)';
+  ALTER DATABASE l2 OWNER TO l2_app;
+  SQL
+  ```
+- No PG ≥ 15 o schema `public` pertence a `pg_database_owner`, ou seja, o dono do banco: **`l2_app` roda as migrations do Flyway sem ser superuser**.
+- O `initdb.d` só roda com o **volume vazio**: mudar o script depois não muda o banco existente (lição do "caso real" da referência). Documentar em `docs/`.
+
+**④ `/otlp` público: como expor sem virar vetor de abuso.**
+- O browser só precisa de `POST /otlp/v1/traces`. A rota do Ingress casa **apenas** esse caminho e o método `POST` (`/otlp/v1/logs` e `/metrics` ficam 404).
+- Cadeia de middlewares Traefik: `StripPrefix(/otlp)` → `RateLimit` por IP (ex.: `average: 20`, `burst: 50`) → `Buffering` com `maxRequestBodyBytes: 1048576` (1 MiB).
+- Collector: receiver OTLP/HTTP em 4318, `memory_limiter` primeiro, depois `batch`; processor `attributes` que **sobrescreve** `service.name=l2-frontend` e marca `telemetry.source=browser`, para um cliente malicioso não se passar pela API. Sem CORS (mesma origem).
+- NetworkPolicy: o Collector aceita ingress só do Traefik (`kube-system`) e dos pods da API.
+- Nada sensível em atributos de span do browser (sem URL de destino do link, sem corpo de requisição) — o SDK do X4 deve filtrar.
+
+**⑤ Rate limit: o que o código realmente faz e como a demo convive com isso.**
+Lido do `portal-app`: `LOGIN`, `REGISTER` e `TRAVEL`, cada um **60 requisições/min por IP** (`capacity=60`, `window=1m` por padrão), contado **em memória por pod**, e o balde é por *rota + IP* — **não** por link. Consequências e decisão:
+- Um loop de cliques de um IP só passa de 60/min em segundos: dá `RATE_LIMIT`, e 60 req/min **não gera CPU suficiente para o HPA escalar**.
+- Os limites são configuráveis por env (`APP_RATELIMIT_TRAVEL_CAPACITY` etc., binding relaxado do Spring). Decisão: no overlay de demo a **`TRAVEL` sobe para um valor alto** (ex.: `6000`) para o loop gerar carga real e o HPA escalar; **`LOGIN`/`REGISTER` ficam no padrão (60)** e viram a cena "Lumi bloqueando ameaça" (rajada de logins → painel de Ameaças `RATE_LIMIT`).
+- Com HPA (2–6 pods) o limite efetivo é N × 60 e a contagem fica irregular. Para a cena de ameaças, **fixar 1 réplica** durante aquele trecho (`kubectl scale` não — o ArgoCD reverte; usar o `minReplicas` do overlay ou pausar o `selfHeal` só na demo) ou aceitar e explicar. Registrado em `docs/` e no `demo-load.sh`.
+- Em produção real isso pede limitador compartilhado (Redis/Bucket4j distribuído); fica como "próximo passo" no pitch.
+
+**⑥ Health/readiness.**
+Corrigido o plano: **não** incluir o banco no grupo `readiness` (um blip do Postgres derrubaria todos os pods ao mesmo tempo). Mantém-se o padrão do Spring (`readinessState`) e a ligação com o banco é garantida no boot (Flyway falha se não conecta). Para não depender de auto-detecção de Kubernetes, setar `MANAGEMENT_ENDPOINT_HEALTH_PROBES_ENABLED=true` no ConfigMap.
+
+---
+
+## 4. Arquitetura alvo
+
+```mermaid
+graph LR
+    U[Navegador / load test] -->|HTTPS| T[Ingress Traefik<br/>TLS cert-manager + RateLimit]
+    T -->|/| FE[frontend nginx :8080]
+    T -->|/api, /r| API[l2-api :8080 / actuator :8081<br/>HPA]
+    T -->|/otlp| OC[OTel Collector]
+    FE -->|/tools/| TA[tools-api :3001]
+    API -->|JDBC postgres:5432| DB[(postgres<br/>Deployment + PVC<br/>Recreate)]
+    API -. OTLP .-> OC
+    OC --> TE[Tempo]
+    PR[Prometheus] -->|scrape :8081| API
+    GF[Grafana] --> PR
+    GF --> TE
+    AR[ArgoCD app-of-apps] -->|sync| T
+```
+
+```mermaid
+graph LR
+    A[PR no portal-app] --> B[CI: testes + Trivy]
+    B -->|merge develop/main| C[build + push GHCR :sha7]
+    C --> D[bump de tag no portal-gitops<br/>overlay local ou oracle]
+    D --> E[CI do gitops: kustomize build + kubeconform + smoke kind]
+    E --> F[ArgoCD detecta o commit e sincroniza]
+```
+
+## 5. Estrutura alvo do repositório
+
+```
+portal-gitops/
+├── README.md                      # ideia, como rodar, como o Kiro foi usado (entregável)
+├── TASKS.md                       # este arquivo
+├── .github/
+│   ├── workflows/                 # pr-validate.yml, smoke-e2e.yml
+│   ├── CODEOWNERS
+│   └── pull_request_template.md
+├── .kiro/                         # steering, specs e hooks (uso do Kiro é avaliado)
+├── apps/l2/
+│   ├── base/                      # manifests do desafio adaptados
+│   │   ├── namespace.yaml  postgres.yaml  postgres-pvc.yaml
+│   │   ├── api.yaml  api-hpa.yaml  configmap.yaml  sealed-secret.yaml
+│   │   ├── frontend.yaml  tools-api.yaml  ingress.yaml  network-policies.yaml
+│   │   └── kustomization.yaml
+│   └── overlays/{local,oracle,ci}/   # StorageClass, host/TLS, réplicas, images[] (bump)
+├── platform/                      # Helm via ArgoCD
+│   ├── cert-manager/  sealed-secrets/  metrics-server/
+│   └── observability/             # otel-collector, tempo, kube-prometheus-stack/grafana, dashboards (.json)
+├── bootstrap/                     # ArgoCD + app-of-apps (root Application, AppProject)
+├── terraform/                     # Oracle Cloud: rede, VM, K3s
+├── scripts/                       # bootstrap-local.sh, demo-load.sh, check-config-secrets.sh
+├── tests/                         # smoke pytest (como na referência)
+└── docs/                          # ci-cd.md, hardening.md, observabilidade.md, kiro.md, evidencias/
+```
+
+## 6. Gitflow deste repositório
+
+```text
+main      ← Oracle (ArgoCD lê main → overlays/oracle)
+ └── develop   ← local (ArgoCD lê develop → overlays/local)
+      ├── feature/*   (manifests, plataforma, dashboards)
+      ├── release/*   (congela e valida antes de ir para main)
+      └── hotfix/*    (derivam de main, voltam para main e develop)
+```
+
+- PR obrigatório para `develop` e `main`; `main` só recebe `release/*`, `hotfix/*` ou o bot de release.
+- **Conventional Commits** (igual ao `portal-app`): `feat(api): ...`, `fix(ingress): ...`, `chore(release): portal-app <sha7>`.
+- O bump de tag mexe **só** em `apps/l2/overlays/<env>/kustomization.yaml`: `local` no `develop`, `oracle` no `main`. Arquivos distintos → merges `develop→main` e `main→develop` não conflitam.
+
+---
+
+## 7. Tasks
+
+### Épico G — Fundação do repo e Gitflow
+
+- [ ] **G1 · P0 · S — Inicializar o repo.** Criar `main` com README mínimo + `.gitignore` (nada de `*.key`, `*.mmdb`, `*.tfstate`, `*.tfvars`, Secret em claro) e derivar `develop` (branch padrão).
+  *Pronto quando:* as duas branches existem.
+- [ ] **G2 · P0 · S — Proteção de branches.** `main`/`develop`: PR + status checks (C1, C2), sem push direto. **Bypass só para a identidade do bot de release** (D2).
+- [ ] **G3 · P1 · S — `CODEOWNERS`, template de PR, convenção de commit/branch** no README.
+- [ ] **G4 · P1 · S — `.kiro/steering`** (produto: Lumi/Travessia/Portal; tecnologia: K3s, Kustomize, ArgoCD; estrutura: árvore acima). Criar `docs/kiro.md` já agora e **registrar cada prompt/decisão conforme acontece** (10% da nota).
+
+### Épico P — Plataforma (`platform/` + `bootstrap/`)
+
+- [ ] **P1 · P0 · M — `scripts/bootstrap-local.sh` idempotente:** cria cluster k3d (80/443 mapeadas), instala ArgoCD e aplica a *root Application* (app-of-apps). Estilo do `setup.sh` da referência.
+  *Pronto quando:* script em máquina limpa deixa o ArgoCD puxando este repo.
+- [ ] **P2 · P0 · M — Sealed Secrets** como Application do ArgoCD (Helm, versão fixada, sync-wave baixa) + `docs` de como selar e **como fazer backup da chave do controller** (perdeu a chave, perdeu os segredos).
+- [ ] **P3 · P0 · M — cert-manager** (Helm via ArgoCD) + `ClusterIssuer`: self-signed no local, Let's Encrypt (HTTP-01) no oracle.
+- [ ] **P4 · P0 · S — metrics-server** garantido (K3s traz; HPA depende dele — a referência já documentava isso).
+- [ ] **P5 · P0 · M — App-of-apps:** root Application em `bootstrap/` → `apps/` e `platform/`; `AppProject l2` limitando repo de origem e namespaces; `sync-waves` (CRDs/plataforma → app), `SkipDryRunOnMissingResource` para CRs de CRD recém-instalada, `ignoreDifferences` em `spec.replicas` do que tiver HPA.
+- [ ] **P6 · P1 · M — Traefik (K3s) via `HelmChartConfig`:** `externalTrafficPolicy: Local` e `forwardedHeaders.trustedIPs` para preservar o IP real (GeoIP/rate limit).
+
+### Épico A — Manifests da aplicação (`apps/l2/base`)
+
+Estética da referência: labels `app.kubernetes.io/*`, comentário explicando o *porquê*, `securityContext` completo, `startupProbe`.
+
+- [ ] **A1 · P0 · S — `namespace.yaml`** `l2`, com labels de Pod Security (`enforce: restricted`; ver S1).
+- [ ] **A2 · P0 · M — Postgres** (detalhes em §3.1 ③): `postgres.yaml` (Deployment **`strategy: Recreate`**, 1 réplica, `postgres:18-alpine` por digest, UID/fsGroup 70), `postgres-pvc.yaml` (`ReadWriteOnce`, **sem `storageClassName` na base** — cada overlay define), Service `postgres:5432`, probes `pg_isready`, `startupProbe`, `readOnlyRootFilesystem` + `emptyDir` em `/tmp` e `/var/run/postgresql`, PVC em `/var/lib/postgresql`.
+  - DB `l2`; **role `l2_app` sem superuser**, dona do banco, criada por script em ConfigMap (`SECURITY.md` §9).
+  - Senhas via arquivo montado do Secret (`POSTGRES_PASSWORD_FILE` e `/run/secrets/l2/app-password`), como na referência.
+  *Pronto quando:* matar o pod do Postgres mantém os dados e o rollout não trava.
+- [ ] **A3 · P0 · M — `configmap.yaml` + `sealed-secret.yaml`:** ConfigMap com `DB_URL=jdbc:postgresql://postgres:5432/l2`, `PUBLIC_BASE_URL`, `SESSION_COOKIE_SECURE`, `OTEL_*`. SealedSecret com `DB_USER`, `DB_PASSWORD`, `JWT_SECRET` (≥256 bits), senha do superuser. `*.example.yaml` documenta as chaves sem valores.
+- [ ] **A4 · P0 · M — `api.yaml` (`l2-api`):** Deployment + Service 8080 (+ porta 8081 só interna):
+  - imagem por `images:` do overlay, porta 8080;
+  - **liveness/readiness em `/actuator/health/liveness|readiness` na 8081 + `startupProbe` generosa** (Spring + Flyway);
+  - **requests 512Mi / limits 768Mi**, CPU requests definidos (necessário para o HPA);
+  - `runAsUser: 1001`, `readOnlyRootFilesystem`, `emptyDir` em `/tmp`, `drop ALL`, `seccomp: RuntimeDefault`;
+  - env: `DB_*` (`DB_USER=l2_app`), `JWT_SECRET` (do SealedSecret), `PUBLIC_BASE_URL`, `OTEL_SERVICE_NAME`, `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_SDK_DISABLED=false`, `MANAGEMENT_ENDPOINT_HEALTH_PROBES_ENABLED=true`;
+  - rate limit no ConfigMap do overlay de demo: `APP_RATELIMIT_TRAVEL_CAPACITY` alto, `LOGIN`/`REGISTER` no padrão (§3.1 ⑤).
+- [ ] **A5 · P1 · S — `api-hpa.yaml`:** CPU 50%, min 2/max 4–6, `behavior.scaleDown` como na referência. É o gancho de demo: loop de cliques → API escala no Grafana.
+- [ ] **A6 · P0 · M — `frontend.yaml`:** Deployment + Service 8080, `TOOLS_API_URL=http://tools-api:3001`, probe em `/healthz`, `readOnlyRootFilesystem` **com `emptyDir` em `/etc/nginx/conf.d` e `/tmp`** (o entrypoint renderiza o template ali).
+- [ ] **A7 · P0 · M — `tools-api.yaml`** (§3.1 ①; Service em sync-wave **antes** do frontend): Deployment + Service 3001; `VT_API_KEY`/`BYPASS_*` opcionais via SealedSecret; `BROWSER_RESOLVER` vazio; `runAsUser` numérico do `pwuser` (conferir na imagem) para passar em PSA `restricted`. Acesso à internet é necessário (ela resolve URLs) — ver S2.
+- [ ] **A8 · P0 · M — `ingress.yaml`:** host único; `/` → frontend; `/api` e `/r` → API:8080; **`/otlp` → Collector:4318** (OTLP/HTTP); **sem rota para 8081**; redirect HTTP→HTTPS; TLS via cert-manager.
+  `/otlp` segue §3.1 ④: só `POST /otlp/v1/traces`, `StripPrefix` → `RateLimit` por IP → `Buffering` (1 MiB), tudo em `Middleware`/`IngressRoute` do Traefik.
+- [ ] **A9 · P1 · S — Middleware Traefik `RateLimit`** grosso/alto nas rotas da API (complementa o Bucket4j — `SECURITY.md` §11a) + headers de segurança.
+- [ ] **A10 · P0 · M — Overlays:**
+  - `local`: StorageClass `local-path`, host `l2.localhost`, TLS self-signed, réplicas baixas;
+  - `oracle`: StorageClass da VM/OCI, host público, Let's Encrypt, `SESSION_COOKIE_SECURE=true`;
+  - `ci` (D-9): sem Ingress/TLS, 1 réplica, Secret de teste em claro **só neste overlay** (valor descartável);
+  - cada overlay com bloco `images:` das 3 imagens (é o que o `yq` do release edita).
+  *Pronto quando:* `kustomize build apps/l2/overlays/{local,oracle,ci}` renderiza sem erro.
+- [ ] **A11 · P1 · S — `network-policies.yaml`** (ver S2) e **`PodDisruptionBudget`** da API.
+- [ ] **A12 · P2 · M — GeoIP opcional:** `geoipupdate` (CronJob) gravando a `.mmdb` em PVC + `GEOIP_DB_PATH`. Licença MaxMind em SealedSecret; **a base nunca entra no Git**. Sem isso nada quebra, só ficam sem país.
+
+### Épico C — CI do gitops (validação em PR)
+
+Actions pinadas **por SHA com comentário de versão**, `permissions: contents: read` e `concurrency`, como o CI do `portal-app`.
+
+- [ ] **C1 · P0 · M — `pr-validate.yml`** (PR → `develop`/`main`, jobs independentes):
+  1. `yamllint` · 2. `kustomize build` de **cada overlay** · 3. `kubeconform -strict` (com schemas de CRD: Traefik, Argo, cert-manager, Sealed Secrets) · 4. **Checkov/kube-linter** (começar soft-fail como a referência, endurecer depois) · 5. **`gitleaks` + `check-config-secrets.sh`** (copiar do `portal-app`; **é o que barra Secret em claro**, com exceção explícita do `overlays/ci`) · 6. política: sem `latest`, com requests/limits, não-root.
+  *Pronto quando:* PR com manifest quebrado ou Secret em claro fica vermelho; PR correto, verde.
+- [ ] **C2 · P1 · L — `smoke-e2e.yml`** (cluster **efêmero** no `kind`, como o `cd.yml` da referência), em PR para `main`:
+  `kubectl apply -k apps/l2/overlays/ci` → espera `Ready` → `pytest tests/`: health da API, cadastro/login, criar link, `GET /r/{code}` = 302 com `Referrer-Policy: no-referrer`, `/actuator/prometheus` com `l2_travels_total`, **dados sobrevivem a deletar o pod do Postgres**. Despeja logs em caso de falha.
+  *Valor extra:* prova que a tag do overlay existe de verdade no GHCR.
+- [ ] **C3 · P2 · S — Dependabot/Renovate** para Actions e charts.
+- [ ] **C4 · P2 · M — `terraform fmt/validate` + `tflint`/`tfsec`** no mesmo workflow quando `terraform/**` mudar.
+
+### Épico D — CD / integração com o `portal-app`
+
+- [ ] **D1 · P0 · M — Fechar o contrato do bump:** alinhar `release.yml` ↔ overlays (caminho `apps/l2/overlays/<env>/kustomization.yaml`, `name` das imagens, `yq`). Criar `GITOPS_TOKEN` (PAT fine-grained, *Contents: write* só neste repo) no `portal-app`.
+- [ ] **D2 · P0 · S — Conciliar com branch protection:** o `release.yml` dá `git push origin HEAD:main`. Opções: (a) bypass só para o bot/PAT; (b) PR automático com auto-merge. Recomendado **(a)** no hackathon; (b) como evolução. Documentar.
+- [ ] **D3 · P1 · M — Fluxo `develop` → `overlays/local`:** o `release.yml` só cobre `main` (→ `oracle`). Replicar o job de bump para `develop` editando o overlay `local` na branch `develop` deste repo (X2).
+- [ ] **D4 · P0 · S — Acesso do cluster ao GHCR:** pacotes nascem privados — torná-los **públicos** ou `imagePullSecret` selado. Testar `ImagePullBackOff` antes da demo.
+- [ ] **D5 · P2 · M — Promoção com gate:** PR `release/*` → `main` verificando que as 3 tags existem; rollback = `git revert` do bump.
+
+### Épico T — Terraform / Oracle Cloud (`terraform/`)
+
+- [ ] **T1 · P1 · M — Rede e VM:** VCN, subnet, security list (22 restrito, 80, 443; **não** expor 6443/8081), instância **Ampere A1.Flex** (Free Tier), chave SSH.
+- [ ] **T2 · P1 · M — K3s via cloud-init** (Traefik habilitado) e saída do `kubeconfig`; opcionalmente já instala o ArgoCD e aplica o `bootstrap/`.
+- [ ] **T3 · P1 · S — Estado e segredos:** backend remoto (bucket OCI) ou local **fora do Git**; variáveis sensíveis em `*.tfvars` ignorado; `terraform.tfvars.example` versionado.
+- [ ] **T4 · P2 · S — `terraform destroy` documentado** (custo/limpeza) e `docs/` com o passo a passo do `apply` até o ArgoCD sincronizando.
+
+### Épico O — Observabilidade (15% da nota + categoria de prêmio)
+
+Helm via ArgoCD em `platform/observability/`.
+
+- [ ] **O1 · P0 · M — OTel Collector** (receiver OTLP gRPC/HTTP → Tempo; processor para **descartar spans de probe** da 8081; atributo `deployment.environment`). Service acessível pelo Ingress em `/otlp` (A8).
+- [ ] **O2 · P0 · M — Tempo** (PVC) e **kube-prometheus-stack** (Prometheus + Grafana + `ServiceMonitor`).
+- [ ] **O3 · P0 · S — Habilitar OTel na API** (A4): `OTEL_SDK_DISABLED=false`, `OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector.<ns>:4318`, `OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf`, `OTEL_TRACES_SAMPLER=parentbased_traceidratio` (`1.0` na demo); manter `OTEL_METRICS_EXPORTER=none`. **Não** adicionar `Authorization` à allowlist de headers (`SECURITY.md` §8).
+- [ ] **O4 · P0 · S — Scrape:** `ServiceMonitor` da API na **8081** `/actuator/prometheus`; métricas do Traefik.
+- [ ] **O5 · P1 · S — Histograma de latência:** `MANAGEMENT_METRICS_DISTRIBUTION_PERCENTILES_HISTOGRAM_HTTP_SERVER_REQUESTS=true` (sem isso só há média, não p95/p99).
+- [ ] **O6 · P0 · M — Grafana provisionado:** datasources Prometheus + Tempo e dashboards como **ConfigMap com JSON versionado** em `platform/observability/dashboards/`. Senha admin em SealedSecret.
+- [ ] **O7 · P0 · L — Dashboard "Lumi — Visão geral":**
+  - **Cliques/Viagens:** `rate(l2_travels_total[1m])` por `bot`; links criados; acumulado;
+  - **Ameaças bloqueadas** por `reason` (inclui `RATE_LIMIT`);
+  - **Latência** p50/p95/p99 por rota e **taxa de erro 5xx**;
+  - **Escala:** réplicas do HPA × CPU (a cena do loop de cliques);
+  - **Saúde:** pods prontos, JVM heap, reinícios, Postgres (ver O9);
+  - painel de **traces** (Tempo) e link métrica→trace (exemplars) para o "momento de prova".
+- [ ] **O8 · P1 · L — Span do frontend:** OTel JS no browser (X4) enviando para `/otlp`; conferir no Tempo um trace **browser → l2-api → JDBC (banco)**.
+- [ ] **O9 · P2 · M — `postgres_exporter`** (sidecar) para métricas do banco (o CNPG daria isso de graça; aqui é manual).
+- [ ] **O10 · P2 · M — Alertas** (erro 5xx, p95, crashloop) e/ou Loki com logs correlacionados por `trace_id`.
+
+### Épico S — Hardening (parte de engenharia cloud-native, 35%)
+
+- [ ] **S1 · P0 · S — Pod Security `restricted`** no namespace `l2` (label). Todo pod precisa passar (nginx e tools-api: UID numérico + `emptyDir`; Postgres alpine: `runAsUser` do `postgres` + `fsGroup`).
+- [ ] **S2 · P1 · M — NetworkPolicies:** `default-deny` ingress **e egress**; Postgres só aceita da API; API só do Ingress/Prometheus; Collector só da API e do Ingress; **tools-api com egress só para internet pública** (bloquear CIDRs do cluster/nós e `169.254.169.254` — defesa em profundidade contra SSRF). K3s aplica; no `kind` do CI são declarativas (documentar).
+- [ ] **S3 · P1 · S — `automountServiceAccountToken: false`** e `ServiceAccount` dedicada por workload.
+- [ ] **S4 · P2 · M — Digest nas imagens de terceiros** (nginx, postgres etc.), como o `hardening-producao.md` da referência.
+- [ ] **S5 · P2 · M — Backup do Postgres** (`CronJob` com `pg_dump` para volume/bucket) — substitui o que o CNPG daria.
+- [ ] **S6 · P1 · S — `docs/hardening.md`** no molde da referência (o quê, por quê, como verificar).
+
+### Épico X — Mudanças necessárias no `portal-app` (outro repo)
+
+- [ ] **X1 · P0 · S — Convenção única de imagem** (§3.1 ②): `ghcr.io/meloju/portal-app-{backend,frontend,tools-api}:<sha7>`. Mergear `feature/release-pipeline` em `develop`.
+- [ ] **X2 · P0 · M — Um workflow `images.yml`** (matriz dos 3 serviços; PR = build+Trivy sem push; `develop` → bump de `overlays/local`; `main` → bump de `overlays/oracle`), substituindo `publish-backend.yml` e `release.yml`. Hoje frontend e tools-api não têm publicação em `develop`.
+- [ ] **X3 · P1 · S — Probes:** confirmar `/actuator/health/liveness|readiness` na 8081 com `MANAGEMENT_ENDPOINT_HEALTH_PROBES_ENABLED=true`; **manter o banco fora do grupo readiness** (§3.1 ⑥).
+- [ ] **X4 · P1 · L — OTel no browser** (`@opentelemetry/sdk-trace-web` + fetch instrumentation), exportando OTLP/HTTP para `/otlp` (mesma origem, sem CORS) e propagando `traceparent` no `api/client.ts`.
+- [ ] **X5 · P2 · S — Seed de demo:** usuário e links de exemplo (ou script).
+
+### Épico Q — Docs, Kiro e pitch (entregáveis)
+
+- [ ] **Q1 · P0 · M — README** (ideia do portal Lumi, arquitetura, como rodar, como o Kiro foi usado) — entregável obrigatório.
+- [ ] **Q2 · P0 · M — `docs/kiro.md`:** prompts, o que o Kiro gerou, o que foi corrigido à mão e por quê. **Registre durante, não no fim.**
+- [ ] **Q3 · P1 · M — `docs/ci-cd.md`** (como o da referência: o que cada workflow faz, soft vs. hard-fail e **um "caso real"** de falha que o pipeline pegou).
+- [ ] **Q4 · P1 · S — `docs/evidencias/`** com prints (ArgoCD synced, pipeline verde, Grafana, trace atravessando, HPA escalando) + `capturar.sh`.
+- [ ] **Q5 · P0 · M — `scripts/demo-load.sh`:** cria usuário e links e dispara `/r/{code}` em loop (modo **`cliques`**, com `TRAVEL` alto no overlay de demo para o HPA escalar) e um modo **`ameaca`** com rajada de `POST /api/auth/login` (limite padrão de 60/min por IP) para encher o painel de Ameaças `RATE_LIMIT`. Ver §3.1 ⑤.
+- [ ] **Q6 · P1 · M — Roteiro do pitch (15 min):** 3 min portal/personagem · 8 min demo (criar link → cliques → Grafana subindo + HPA escalando → trace browser→API→DB) · 2 min pipeline (Actions → ArgoCD) e Kiro · 2 min perguntas. Ensaiar com o cluster **já aquecido**.
+
+---
+
+## 8. Ordem sugerida (casa com as etapas do desafio)
+
+| Marco | Tasks | Resultado verificável |
+| --- | --- | --- |
+| **M1 — Núcleo no cluster** (etapas 1–2) | G1–G2, P1, A1–A4, A6–A8, A10 (local) | `l2.localhost` abre o front, cadastra, cria link, `/r/{code}` redireciona; dados persistem após matar o pod do Postgres |
+| **M2 — Esteira + GitOps** (etapa 3) | P2–P5, C1, D1–D2, D4, X1–X2 | Commit no Git → ArgoCD aplica sozinho; merge no `portal-app` troca a tag e o cluster atualiza |
+| **M3 — Observabilidade** (etapa 4) | O1–O7, A5, X3 | Dashboard reagindo ao `demo-load.sh`, HPA escalando, trace da API no Tempo |
+| **M4 — Cloud e robustez** | T1–T3, A10 (oracle), S1–S3, C2, D3 | Mesma app na Oracle via ArgoCD; smoke e2e no kind; pods passam em PSA `restricted` |
+| **M5 — Alma e pitch** (etapa 5) | O8/X4, Q1–Q6, + P2 que sobrar | Trace browser→API→DB, README, `kiro.md`, evidências, roteiro ensaiado |
+
+**Caminho crítico:** G1 → P1 → A1–A4/A6/A7 → A8 → P5 → X1/X2/D1 → O1–O7. Se o tempo apertar, cortar **P2** e depois os **P1** de S/C/T antes de qualquer **P0**. Terraform/Oracle é bônus: o `local` precisa estar impecável primeiro.
+
+---
+
+## 9. Riscos e pegadinhas
+
+- **Nome de imagem divergente** entre os workflows do `portal-app` (X1): o `ImagePullBackOff` mais provável. E **GHCR privado por padrão** (D4).
+- **`release.yml` aponta para `lumi/overlays/prod`** — com o layout novo ele commitaria num caminho inexistente (X2).
+- **`GITOPS_TOKEN` + branch protection:** push direto em `main` falha *depois* de publicar as imagens se não houver bypass (D2).
+- **nginx do frontend não sobe sem a tools-api resolvível** (por isso ela entra, mesmo fora do desenho original).
+- **`Recreate` no Postgres:** com `RollingUpdate` o rollout trava no PVC RWO. É a regra nº 1 do A2.
+- **Postgres 18:** mount em `/var/lib/postgresql`, não `/var/lib/postgresql/data`; UID alpine ≠ Debian.
+- **Flyway no boot** atrasa o *Ready* — `startupProbe` folgada, senão `CrashLoopBackOff` aparente.
+- **JVM com pouca memória:** limite abaixo de ~512Mi é OOMKill; limite de 768Mi com `MaxRAMPercentage=75` deixa folga para metaspace/threads.
+- **Rate limit** (§3.1 ⑤): 60 req/min por IP e por rota, em memória, por pod. Com HPA o limite efetivo é N×60; subir `TRAVEL` na demo de cliques e deixar `LOGIN` no padrão para a cena de ameaças.
+- **IP do cliente perdido** atrás do Traefik/klipper-lb → GeoIP e rate limit veem o IP do proxy (P6).
+- **Cookie `Secure`** em HTTP: login "não funciona" fora de `localhost` sem TLS. `SESSION_COOKIE_SECURE=false` só no overlay `local`, **nunca** no `oracle`.
+- **`/otlp` é endpoint público de escrita:** exige rate limit e limite de body (A8); senão vira vetor de abuso/DoS do Collector.
+- **SealedSecret é por cluster:** o secret do `local` não abre no `oracle`; gerar um por overlay e fazer backup da chave (P2).
+- **`readOnlyRootFilesystem` no nginx** quebra o boot sem `emptyDir` em `/etc/nginx/conf.d` e `/tmp` (A6).
+- **CRDs antes das CRs** (cert-manager, ServiceMonitor, SealedSecret): primeiro sync falha sem sync-waves (P5).
+- **NetworkPolicy no `kind`** não é aplicada: a prova real é no k3d/K3s.
+- **Segredo na tela da demo:** Grafana/Argo mostram senhas? Não abrir `kubectl get secret -o yaml` ao vivo.
+
+---
+
+## 10. Checklist de entregáveis do hackathon
+
+- [ ] Repositório com código, manifests e workflows (este + `portal-app`)
+- [ ] Frontend, API e banco **rodando no cluster, entregues via ArgoCD**
+- [ ] Dashboard Grafana + traces OpenTelemetry demonstráveis ao vivo
+- [ ] Personagem (Lumi), identidade e features exclusivas apresentadas
+- [ ] README: ideia, como rodar, como o Kiro foi usado (`docs/kiro.md`)
+- [ ] Pitch de 15 min ensaiado com `demo-load.sh`
