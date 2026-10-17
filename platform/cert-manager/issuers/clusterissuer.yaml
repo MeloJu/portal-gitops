@@ -1,0 +1,8 @@
+# Emissor self-signed do ambiente local: o certificado assina a si mesmo. Dá HTTPS de verdade
+# (e exercita o cert-manager), mas nenhum navegador confia nele: o aviso é esperado.
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: selfsigned
+spec:
+  selfSigned: {}

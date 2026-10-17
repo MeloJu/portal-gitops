@@ -1,0 +1,31 @@
+# Ajuste do Traefik que o K3s instala (HelmChartConfig é do helm-controller do K3s e se casa
+# pelo nome com o HelmChart `traefik`).
+#
+# Por que: a API usa o IP do visitante para o rate limit e para o país da Viagem (GeoIP), lendo
+# X-Forwarded-For (`server.forward-headers-strategy: native`). Por padrão o Traefik NÃO confia em
+# X-Forwarded-For de ninguém e o substitui pelo IP de quem conectou, então todo visitante
+# pareceria ter o IP do proxy e dividiria o mesmo balde de rate limit.
+apiVersion: helm.cattle.io/v1
+kind: HelmChartConfig
+metadata:
+  name: traefik
+  namespace: kube-system
+spec:
+  valuesContent: |-
+    # Preserva o IP de origem do cliente (sem NAT do kube-proxy para outro nó).
+    service:
+      spec:
+        externalTrafficPolicy: Local
+    ports:
+      web:
+        forwardedHeaders:
+          # Só confia no X-Forwarded-For vindo de redes privadas (o balanceador na frente do
+          # cluster). Um cliente da internet não consegue forjar o IP que a API enxerga.
+          trustedIPs: &trusted
+            - 127.0.0.1/32
+            - 10.0.0.0/8
+            - 172.16.0.0/12
+            - 192.168.0.0/16
+      websecure:
+        forwardedHeaders:
+          trustedIPs: *trusted

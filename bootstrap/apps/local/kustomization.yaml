@@ -6,4 +6,6 @@ resources:
   - project-platform.yaml
   # Camada de plataforma compartilhada (o cluster oracle usa as mesmas Applications).
   - ../../../platform/sealed-secrets
+  - ../../../platform/cert-manager
+  - ../../../platform/traefik
   - l2.yaml

@@ -1,0 +1,30 @@
+# Os Issuers ficam numa Application própria: um ClusterIssuer só é válido depois que o
+# cert-manager instalou os CRDs, e o Argo precisa tratar isso em duas etapas.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: cert-manager-issuers
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: platform
+  source:
+    repoURL: https://github.com/MeloJu/portal-gitops.git
+    targetRevision: develop
+    path: platform/cert-manager/issuers
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: cert-manager
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      # O CRD ClusterIssuer pode ainda não existir na primeira passada (dry-run).
+      - SkipDryRunOnMissingResource=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 10s
+        factor: 2
