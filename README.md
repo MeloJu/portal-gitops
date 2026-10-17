@@ -285,12 +285,12 @@ acharia (o Traefik tratando `Prefix` como prefixo de texto e roubando links curt
 O registro completo, com os prompts, as decisões e **o que o Claude errou e foi corrigido**, está em
 [`docs/uso-do-claude.md`](docs/uso-do-claude.md).
 
-## 👤 Autor
+## 👥 Equipe
 
 <table align="center">
   <tr>
     <td align="center">
-      <img src="https://avatars.githubusercontent.com/u/87333686?v=4" alt="Juan Melo" width="120" height="120" style="border-radius: 50%;">
+      <img src="https://github.com/MeloJu.png?size=240" alt="Juan Melo" width="120" height="120" style="border-radius: 50%;">
       <br>
       <strong>Juan Melo</strong>
       <br>
@@ -299,6 +299,24 @@ O registro completo, com os prompts, as decisões e **o que o Claude errou e foi
       </a>
       <a href="https://www.linkedin.com/in/juan-melo-705626199/" target="_blank">
         <img src="https://img.shields.io/badge/LinkedIn-0077B5?style=for-the-badge&logo=linkedin&logoColor=white" alt="LinkedIn">
+      </a>
+    </td>
+    <td align="center">
+      <img src="https://github.com/drezix.png?size=240" alt="André Agostinis" width="120" height="120" style="border-radius: 50%;">
+      <br>
+      <strong>André Agostinis</strong>
+      <br>
+      <a href="https://github.com/drezix" target="_blank">
+        <img src="https://img.shields.io/badge/GitHub-100000?style=for-the-badge&logo=github&logoColor=white" alt="GitHub">
+      </a>
+    </td>
+    <td align="center">
+      <img src="https://github.com/eduardoberlink.png?size=240" alt="Eduardo Berlink" width="120" height="120" style="border-radius: 50%;">
+      <br>
+      <strong>Eduardo Berlink</strong>
+      <br>
+      <a href="https://github.com/eduardoberlink" target="_blank">
+        <img src="https://img.shields.io/badge/GitHub-100000?style=for-the-badge&logo=github&logoColor=white" alt="GitHub">
       </a>
     </td>
   </tr>
