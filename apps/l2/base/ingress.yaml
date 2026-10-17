@@ -4,9 +4,10 @@
 #   /r/*    -> l2-api:8080   (redirect direto da API; NÃO passa pelo nginx)
 #   /*      -> frontend:8080 (React Router; /{code} é a Travessia)
 #
-# `Prefix` casa por segmento de caminho: "/r" pega /r/abc mas não /rocket, que é um link
-# curto e precisa cair no frontend. O host é definido por overlay.
-# Nenhuma rota aponta para a 8081 (Actuator).
+# ATENÇÃO: os paths terminam em "/" de propósito. O Traefik implementa `Prefix` como prefixo
+# de TEXTO (não por segmento, como diz a spec do Kubernetes): com "/r", o link curto
+# "rocket" ou "reuniao" cairia na API em vez do frontend. Com "/r/" só entra o que é /r/<algo>.
+# O host é definido por overlay. Nenhuma rota aponta para a 8081 (Actuator).
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -19,14 +20,14 @@ spec:
   rules:
     - http:
         paths:
-          - path: /api
+          - path: /api/
             pathType: Prefix
             backend:
               service:
                 name: l2-api
                 port:
                   name: http
-          - path: /r
+          - path: /r/
             pathType: Prefix
             backend:
               service:
