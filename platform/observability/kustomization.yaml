@@ -7,4 +7,5 @@ resources:
   - tempo.yaml
   - otel-collector.yaml
   - dashboards-application.yaml
+  - otlp-application.yaml
   - monitors-application.yaml
