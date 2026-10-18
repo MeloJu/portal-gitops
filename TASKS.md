@@ -8,7 +8,7 @@ adaptando o desafio de referência [`k8s-postgrest-challenge`](https://github.co
 > Repo de destino: `https://github.com/MeloJu/portal-gitops`. A árvore abaixo usa o layout "l2-gitops" combinado.
 > **Copiloto de IA:** o enunciado do desafio cita o Kiro, mas a organização liberou o **Claude** no lugar. O uso é registrado em `docs/uso-do-claude.md` (critério "Uso do copiloto", 10% da nota).
 > **Escopo atual:** só o cluster **local**. O ambiente Oracle (e o que depende dele: Let's Encrypt, SealedSecret de produção, Terraform) foi adiado.
-> **Progresso:** 28 de 62 tasks feitas · faltam 29 no escopo atual (P0: 9 · P1: 12 · P2: 8) · 5 adiadas (Oracle/Terraform). Atualizado a cada PR que fecha task.
+> **Progresso:** 32 de 62 tasks feitas · faltam 25 no escopo atual (P0: 5 · P1: 12 · P2: 8) · 5 adiadas (Oracle/Terraform). Atualizado a cada PR que fecha task.
 > **Status:** M1 e a plataforma local (P1–P6) feitos e mergeados na `develop`; G1–G4 feitos. Próximo: observabilidade (O1–O7). Legenda das notas: ✅ feito · ◐ parcial · ⏸ adiado.
 > Legenda: **P0** = sem isso não há demo · **P1** = nota alta · **P2** = diferencial. Tamanho: **S** (<1h) · **M** (1–3h) · **L** (>3h).
 
@@ -291,9 +291,12 @@ Actions pinadas **por SHA com comentário de versão**, `permissions: contents: 
 ### Épico D — CD / integração com o `portal-app`
 
 - [ ] **D1 · P0 · M — Fechar o contrato do bump:** alinhar `release.yml` ↔ overlays (caminho `apps/l2/overlays/<env>/kustomization.yaml`, `name` das imagens, `yq`). Criar `GITOPS_TOKEN` (PAT fine-grained, *Contents: write* só neste repo) no `portal-app`.
+  ◐ *Parcial:* contrato fechado no workflow (overlay `local`, `images[].newTag` via `yq`, PR + auto-merge). Depende do token com escrita para ser validado de ponta a ponta.
 - [ ] **D2 · P0 · S — Conciliar com branch protection:** o `release.yml` dá `git push origin HEAD:main`. Opções: (a) bypass só para o bot/PAT; (b) PR automático com auto-merge. Recomendado **(a)** no hackathon; (b) como evolução. Documentar.
+  ◐ *Parcial:* decidido: **PR com auto-merge** (nada pula a proteção de branch). *Allow auto-merge* ligado no `portal-gitops`. Falta o token com escrita para exercitar.
 - [ ] **D3 · P1 · M — Fluxo `develop` → `overlays/local`:** o `release.yml` só cobre `main` (→ `oracle`). Replicar o job de bump para `develop` editando o overlay `local` na branch `develop` deste repo (X2).
-- [ ] **D4 · P0 · S — Acesso do cluster ao GHCR:** pacotes nascem privados — torná-los **públicos** ou `imagePullSecret` selado. Testar `ImagePullBackOff` antes da demo.
+- [x] **D4 · P0 · S — Acesso do cluster ao GHCR:** pacotes nascem privados — torná-los **públicos** ou `imagePullSecret` selado. Testar `ImagePullBackOff` antes da demo.
+  ✅ *Feito:* as três imagens `ghcr.io/meloju/portal-app-*:sha-ac36872` baixam **sem login** (manifest `200` anônimo): os pacotes herdaram a visibilidade pública do repositório; não precisa de `imagePullSecret`.
 - [ ] **D5 · P2 · M — Promoção com gate:** PR `release/*` → `main` verificando que as 3 tags existem; rollback = `git revert` do bump.
 
 ### Épico T — Terraform / Oracle Cloud (`terraform/`)
@@ -317,8 +320,8 @@ Helm via ArgoCD em `platform/observability/`.
   ✅ *Feito:* Tempo 1.24.4 (PVC, service graph + span metrics) e kube-prometheus-stack 92.10.1 (sem Alertmanager).
 - [x] **O3 · P0 · S — Habilitar OTel na API** (A4): `OTEL_SDK_DISABLED=false`, `OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector.<ns>:4318`, `OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf`, `OTEL_TRACES_SAMPLER=parentbased_traceidratio` (`1.0` na demo); manter `OTEL_METRICS_EXPORTER=none`. **Não** adicionar `Authorization` à allowlist de headers (`SECURITY.md` §8).
   ✅ *Feito:* OTel ligado na API pelo `l2-config.env`; trace verificado: Traefik → `GET /r/{code}` → `SELECT`/`UPDATE`/`INSERT` no Postgres.
-- [ ] **O4 · P0 · S — Scrape:** `ServiceMonitor` da API na **8081** `/actuator/prometheus`; métricas do Traefik.
-  ◐ *Parcial:* `ServiceMonitor` da API na 8081 (`up=1`). **Falta** métricas do Traefik.
+- [x] **O4 · P0 · S — Scrape:** `ServiceMonitor` da API na **8081** `/actuator/prometheus`; métricas do Traefik.
+  ✅ *Feito:* `ServiceMonitor` da API (8081) e `PodMonitor` do Traefik (porta `metrics` 9100, só dentro do cluster, numa Application com retry por causa do CRD). Verificado: alvo `traefik` `up` e `traefik_entrypoint_requests_total` contando. *(PR #8, @drezix)*
 - [x] **O5 · P1 · S — Histograma de latência:** `MANAGEMENT_METRICS_DISTRIBUTION_PERCENTILESHISTOGRAM_HTTP_SERVER_REQUESTS=true` (sem isso só há média, não p95/p99).
   ✅ *Feito:* histograma ligado (p50 4 ms / p95 13 ms / p99 40 ms sob carga). O nome da variável é `PERCENTILESHISTOGRAM`; com `PERCENTILES_HISTOGRAM` a API não sobe.
 - [x] **O6 · P0 · M — Grafana provisionado:** datasources Prometheus + Tempo e dashboards como **ConfigMap com JSON versionado** em `platform/observability/dashboards/`. Senha admin em SealedSecret.
@@ -350,8 +353,10 @@ Helm via ArgoCD em `platform/observability/`.
 
 ### Épico X — Mudanças necessárias no `portal-app` (outro repo)
 
-- [ ] **X1 · P0 · S — Convenção única de imagem** (§3.1 ②): `ghcr.io/meloju/portal-app-{backend,frontend,tools-api}:<sha7>`. Mergear `feature/release-pipeline` em `develop`.
+- [x] **X1 · P0 · S — Convenção única de imagem** (§3.1 ②): `ghcr.io/meloju/portal-app-{backend,frontend,tools-api}:<sha7>`. Mergear `feature/release-pipeline` em `develop`.
+  ✅ *Feito:* nome único `ghcr.io/meloju/portal-app-{backend,frontend,tools-api}` e tag `sha-<7>`, publicados pelo `images.yml` (portal-app #69); o `publish-backend.yml` foi removido.
 - [ ] **X2 · P0 · M — Um workflow `images.yml`** (matriz dos 3 serviços; PR = build+Trivy sem push; `develop` → bump de `overlays/local`; `main` → bump de `overlays/oracle`), substituindo `publish-backend.yml` e `release.yml`. Hoje frontend e tools-api não têm publicação em `develop`.
+  ◐ *Parcial:* o `images.yml` roda depois de todos os testes, o Trivy barra CRITICAL e as três imagens foram publicadas no primeiro push em `develop`. **Falta o PR de bump**: o job falhou com `403` no push porque o `GITOPS_TOKEN` não tem escrita no `portal-gitops` (conferir *Contents: Read and write* e *Pull requests: Read and write*).
 - [x] **X3 · P1 · S — Probes:** confirmar `/actuator/health/liveness|readiness` na 8081 com `MANAGEMENT_ENDPOINT_HEALTH_PROBES_ENABLED=true`; **manter o banco fora do grupo readiness** (§3.1 ⑥).
   ✅ *Feito:* verificado sem mudar o `portal-app`: `/actuator/health/readiness` responde `UP` na 8081, o banco fica fora do grupo readiness (padrão do Spring) e o ConfigMap seta `MANAGEMENT_ENDPOINT_HEALTH_PROBES_ENABLED=true`.
 - [ ] **X4 · P1 · L — OTel no browser** (`@opentelemetry/sdk-trace-web` + fetch instrumentation), exportando OTLP/HTTP para `/otlp` (mesma origem, sem CORS) e propagando `traceparent` no `api/client.ts`.
@@ -365,7 +370,8 @@ Helm via ArgoCD em `platform/observability/`.
   ✅ *Feito:* `docs/uso-do-claude.md` com prompts, decisões e a tabela de erros corrigidos. É contínuo: cada PR relevante acrescenta.
 - [ ] **Q3 · P1 · M — `docs/ci-cd.md`** (como o da referência: o que cada workflow faz, soft vs. hard-fail e **um "caso real"** de falha que o pipeline pegou).
 - [ ] **Q4 · P1 · S — `docs/evidencias/`** com prints (ArgoCD synced, pipeline verde, Grafana, trace atravessando, HPA escalando) + `capturar.sh`.
-- [ ] **Q5 · P0 · M — `scripts/demo-load.sh`:** cria usuário e links e dispara `/r/{code}` em loop (modo **`cliques`**, com `TRAVEL` alto no overlay de demo para o HPA escalar) e um modo **`ameaca`** com rajada de `POST /api/auth/login` (limite padrão de 60/min por IP) para encher o painel de Ameaças `RATE_LIMIT`. Ver §3.1 ⑤.
+- [x] **Q5 · P0 · M — `scripts/demo-load.sh`:** cria usuário e links e dispara `/r/{code}` em loop (modo **`cliques`**, com `TRAVEL` alto no overlay de demo para o HPA escalar) e um modo **`ameaca`** com rajada de `POST /api/auth/login` (limite padrão de 60/min por IP) para encher o painel de Ameaças `RATE_LIMIT`. Ver §3.1 ⑤.
+  ✅ *Feito:* `scripts/demo-load.sh` com `setup`, `cliques` e `ameaca`. Verificado no cluster: `cliques` = 8.000 viagens como humanas (User-Agent de navegador) e o HPA foi de 1 para 3 réplicas em ~75 s; `ameaca` = 399×`401` e 81×`429`, `RATE_LIMIT` de 0 para 3 (uma recusa por pod por janela). *(PR #10, @drezix)*
 - [ ] **Q6 · P1 · M — Roteiro do pitch (15 min):** 3 min portal/personagem · 8 min demo (criar link → cliques → Grafana subindo + HPA escalando → trace browser→API→DB) · 2 min pipeline (Actions → ArgoCD) e uso do Claude · 2 min perguntas. Ensaiar com o cluster **já aquecido**.
 
 ---
