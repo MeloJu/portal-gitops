@@ -174,7 +174,6 @@ portal-gitops/
 │   ├── workflows/                 # pr-validate.yml, smoke-e2e.yml
 │   ├── CODEOWNERS
 │   └── pull_request_template.md
-├── CLAUDE.md                      # contexto do projeto para o copiloto (uso do copiloto é avaliado)
 ├── apps/l2/
 │   ├── base/                      # manifests do desafio adaptados
 │   │   ├── namespace.yaml  postgres.yaml  postgres-pvc.yaml
@@ -217,7 +216,7 @@ main      ← Oracle (ArgoCD lê main → overlays/oracle)
   ✅ *Feito:* `develop` (padrão) e `main` existem.
 - [x] **G2 · P0 · S — Proteção de branches.** `main`/`develop`: PR + status checks (C1, C2), sem push direto. **Bypass só para a identidade do bot de release** (D2).
 - [x] **G3 · P1 · S — `CODEOWNERS`, template de PR, convenção de commit/branch** no README.
-- [x] **G4 · P1 · S — `CLAUDE.md`** na raiz (produto: Lumi/Travessia/Portal; tecnologia: K3s, Kustomize, ArgoCD; estrutura: árvore acima; regras: Secret nunca em claro, paths do Ingress com `/` final, mudança só via Git). Criar `docs/uso-do-claude.md` já agora e **registrar cada prompt/decisão conforme acontece** (10% da nota).
+- [x] **G4 · P1 · S — `CLAUDE.md`** (retirado do repositório a pedido do dono em 18/10/2026; a cópia fica só na máquina local) na raiz (produto: Lumi/Travessia/Portal; tecnologia: K3s, Kustomize, ArgoCD; estrutura: árvore acima; regras: Secret nunca em claro, paths do Ingress com `/` final, mudança só via Git). Criar `docs/uso-do-claude.md` já agora e **registrar cada prompt/decisão conforme acontece** (10% da nota).
 
 ### Épico P — Plataforma (`platform/` + `bootstrap/`)
 
@@ -389,7 +388,7 @@ Helm via ArgoCD em `platform/observability/`.
   ✅ *Base documental preparada:* roteiro e script não coletam nem inventam resultados; capturas reais ficam pendentes da infraestrutura e dos estados descritos em `docs/evidencias/README.md`.
 - [x] **Q5 · P0 · M — `scripts/demo-load.sh`:** cria usuário e links e dispara `/r/{code}` em loop (modo **`cliques`**, com `TRAVEL` alto no overlay de demo para o HPA escalar) e um modo **`ameaca`** com rajada de `POST /api/auth/login` (limite padrão de 60/min por IP) para encher o painel de Ameaças `RATE_LIMIT`. Ver §3.1 ⑤.
   ✅ *Feito:* `scripts/demo-load.sh` com `setup`, `cliques` e `ameaca`. Verificado no cluster: `cliques` = 8.000 viagens como humanas (User-Agent de navegador) e o HPA foi de 1 para 3 réplicas em ~75 s; `ameaca` = 399×`401` e 81×`429`, `RATE_LIMIT` de 0 para 3 (uma recusa por pod por janela). *(PR #10, @drezix)*
-- [ ] **Q6 · P1 · M — `PITCH.md`, roteiro do pitch (15 min):** 3 min portal/personagem · 8 min demo (criar link → cliques → Grafana/HPA → trace browser→API→DB) · 2 min pipeline (Actions → ArgoCD) e uso do Claude · 2 min perguntas. Roteiro pronto; ensaio cronometrado com o cluster **já aquecido** ainda pendente.
+- [ ] **Q6 · P1 · M — roteiro do pitch (15 min):** 3 min portal/personagem · 8 min demo (criar link → cliques → Grafana/HPA → trace browser→API→DB) · 2 min pipeline (Actions → ArgoCD) e uso do Claude · 2 min perguntas. O `PITCH.md` (Grace) foi **retirado do repositório** a pedido do dono em 18/10/2026 (o roteiro fica fora do Git); ensaio cronometrado com o cluster **já aquecido** ainda pendente.
 
 ---
 
@@ -447,12 +446,12 @@ Helm via ArgoCD em `platform/observability/`.
 ## 11. Para delegar — o que falta (6 tasks)
 
 Cada item diz o que entregar, como provar que está pronto e o que já existe para reaproveitar. Antes de começar:
-`CLAUDE.md` (regras do projeto), `docs/ci-cd.md` (como um PR chega ao cluster) e `./scripts/bootstrap-local.sh`
+`docs/ci-cd.md` (como um PR chega ao cluster) e `./scripts/bootstrap-local.sh`
 (sobe o cluster local). **Todo PR passa por 9 checks obrigatórios**, e a task só é marcada `[x]` depois de validada.
 
 | Task | Prio | Esforço | O que entregar | Pronto quando | Reaproveitar |
 | --- | --- | --- | --- | --- | --- |
-| **Q6** Roteiro do pitch | P1 | M | `PITCH.md`: 3 min portal/personagem · 8 min demo ao vivo · 2 min pipeline e Claude · 2 min perguntas, falas, transições e comando de cada cena | alguém que não construiu consegue ensaiar o pitch só com o documento, e ele cabe em 15 min cronometrado | `scripts/demo-load.sh` (cenas `cliques` e `ameaca`), `scripts/check-browser-trace.sh`, dashboard "Lumi — Visão geral", `docs/ci-cd.md` |
+| **Q6** Roteiro do pitch | P1 | M | Roteiro (fora do Git): 3 min portal/personagem · 8 min demo ao vivo · 2 min pipeline e Claude · 2 min perguntas, falas, transições e comando de cada cena | alguém que não construiu consegue ensaiar o pitch só com o documento, e ele cabe em 15 min cronometrado | `scripts/demo-load.sh` (cenas `cliques` e `ameaca`), `scripts/check-browser-trace.sh`, dashboard "Lumi — Visão geral", `docs/ci-cd.md` |
 | **Q4** Evidências | P1 | S | `docs/evidencias/` com prints: ArgoCD `Synced`, pipeline verde (CI + PR de bump), Grafana com o HPA escalando, trace `l2-frontend → traefik → l2-api → Postgres` no Tempo, alerta disparado | cada print tem legenda do que prova; referenciados no README | dados reais: rode `demo-load.sh cliques` e `ameaca` antes de capturar |
 | **S6** `hardening.md` | P1 | S | `docs/hardening.md` no molde do `hardening-producao.md` do desafio de referência: o quê, por quê, como verificar | cada controle tem um comando de verificação que funciona | já feito e testado: PSA `restricted`, NetworkPolicies, SA sem token, Checkov, segredos (SealedSecret/gitleaks), rate limit em 2 camadas, `/otlp` em 4 camadas, digest, backup |
 | ✅ **C5** Check Terraform obrigatório | P1 | S | `Terraform (fmt, validate, scan)` nos status checks obrigatórios da `develop` e da `main` (G2/C1/C2). Antes: PRs #30 e #31 mergeados e o job ter rodado uma vez na `develop`/`main`; se o workflow ganhar `paths: terraform/**`, o job tem que rodar sempre e sair cedo, senão PR sem Terraform fica pendente para sempre | ✅ **Feito em 2026-10-18:** `required_status_checks.contexts` lista o check nas duas branches (branch protection clássica, aplicada pelo dono do repositório) e a contagem acima já é 9 | job do C4 em `.github/workflows/pr-validate.yml` (hoje sem filtro `paths:`) |
