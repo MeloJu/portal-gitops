@@ -8,7 +8,7 @@ adaptando o desafio de referência [`k8s-postgrest-challenge`](https://github.co
 > Repo de destino: `https://github.com/MeloJu/portal-gitops`. A árvore abaixo usa o layout "l2-gitops" combinado.
 > **Copiloto de IA:** o enunciado do desafio cita o Kiro, mas a organização liberou o **Claude** no lugar. O uso é registrado em `docs/uso-do-claude.md` (critério "Uso do copiloto", 10% da nota).
 > **Escopo atual:** só o cluster **local**. O ambiente Oracle (e o que depende dele: Let's Encrypt, SealedSecret de produção, Terraform) foi adiado.
-> **Progresso:** 37 de 62 tasks feitas · faltam 20 no escopo atual (P0: 2 · P1: 10 · P2: 8) · 5 adiadas (Oracle/Terraform). Atualizado a cada PR que fecha task.
+> **Progresso:** 39 de 62 tasks feitas · faltam 18 no escopo atual (P0: 0 · P1: 10 · P2: 8) · 5 adiadas (Oracle/Terraform). Atualizado a cada PR que fecha task.
 > **Status:** M1 e a plataforma local (P1–P6) feitos e mergeados na `develop`; G1–G4 feitos. Próximo: observabilidade (O1–O7). Legenda das notas: ✅ feito · ◐ parcial · ⏸ adiado.
 > Legenda: **P0** = sem isso não há demo · **P1** = nota alta · **P2** = diferencial. Tamanho: **S** (<1h) · **M** (1–3h) · **L** (>3h).
 
@@ -259,9 +259,9 @@ Estética da referência: labels `app.kubernetes.io/*`, comentário explicando o
   ✅ *Feito:* validado com metrics-server (CPU real); janela de scale-up evita cascata na partida da JVM.
 - [x] **A6 · P0 · M — `frontend.yaml`:** Deployment + Service 8080, `TOOLS_API_URL=http://tools-api:3001`, probe em `/healthz`, `readOnlyRootFilesystem` **com `emptyDir` em `/etc/nginx/conf.d` e `/tmp`** (o entrypoint renderiza o template ali).
 - [x] **A7 · P0 · M — `tools-api.yaml`** (§3.1 ①; Service em sync-wave **antes** do frontend): Deployment + Service 3001; `VT_API_KEY`/`BYPASS_*` opcionais via SealedSecret; `BROWSER_RESOLVER` vazio; `runAsUser` numérico do `pwuser` (conferir na imagem) para passar em PSA `restricted`. Acesso à internet é necessário (ela resolve URLs) — ver S2.
-- [ ] **A8 · P0 · M — `ingress.yaml`:** host único; `/` → frontend; `/api` e `/r` → API:8080; **`/otlp` → Collector:4318** (OTLP/HTTP); **sem rota para 8081**; redirect HTTP→HTTPS; TLS via cert-manager.
+- [x] **A8 · P0 · M — `ingress.yaml`:** host único; `/` → frontend; `/api` e `/r` → API:8080; **`/otlp` → Collector:4318** (OTLP/HTTP); **sem rota para 8081**; redirect HTTP→HTTPS; TLS via cert-manager.
   `/otlp` segue §3.1 ④: só `POST /otlp/v1/traces`, `StripPrefix` → `RateLimit` por IP → `Buffering` (1 MiB), tudo em `Middleware`/`IngressRoute` do Traefik.
-  ◐ *Parcial:* rotas `/`, `/api/`, `/r/` com barra final (bug do `Prefix` do Traefik) e TLS self-signed no local. **Falta a rota `/otlp`** (entra com a observabilidade, O1/O8).
+  ✅ *Feito:* `/otlp/v1/traces` (Exact) por HTTP e HTTPS, com rate limit (20/s, burst 50), corpo de até 1 MiB e prefixo removido, apontando para um receiver **separado** do Collector que sobrescreve `service.name`/`telemetry.source`. Verificado no cluster: span aceito (`200`), `logs`/`metrics` não chegam ao Collector, 2 MiB → `413`, rajada de 150 → 66×`429`, e uma identidade falsa (`l2-api`) gravada no Tempo como `l2-frontend`. Ver [`docs/observabilidade.md`](docs/observabilidade.md).
 - [ ] **A9 · P1 · S — Middleware Traefik `RateLimit`** grosso/alto nas rotas da API (complementa o Bucket4j — `SECURITY.md` §11a) + headers de segurança.
 - [x] **A10 · P0 · M — Overlays:**
   - `local`: StorageClass `local-path`, host `l2.localhost`, TLS self-signed, réplicas baixas;
@@ -277,10 +277,10 @@ Estética da referência: labels `app.kubernetes.io/*`, comentário explicando o
 
 Actions pinadas **por SHA com comentário de versão**, `permissions: contents: read` e `concurrency`, como o CI do `portal-app`.
 
-- [ ] **C1 · P0 · M — `pr-validate.yml`** (PR → `develop`/`main`, jobs independentes):
+- [x] **C1 · P0 · M — `pr-validate.yml`** (PR → `develop`/`main`, jobs independentes):
   1. `yamllint` · 2. `kustomize build` de **cada overlay** · 3. `kubeconform -strict` (com schemas de CRD: Traefik, Argo, cert-manager, Sealed Secrets) · 4. **Checkov/kube-linter** (começar soft-fail como a referência, endurecer depois) · 5. **`gitleaks` + `check-config-secrets.sh`** (copiar do `portal-app`; **é o que barra Secret em claro**, com exceção explícita do `overlays/ci`) · 6. política: sem `latest`, com requests/limits, não-root.
   *Pronto quando:* PR com manifest quebrado ou Secret em claro fica vermelho; PR correto, verde.
-  ◐ *Parcial:* kustomize build de cada overlay + kubeconform, render do app-of-apps e de `platform/`, yamllint, gitleaks, *Nenhum Secret em claro*, imagem sem `latest`, *Gitflow*. Roda em qualquer base e quando a base muda. **Falta** Checkov/kube-linter e a política "não-root/requests" automatizada.
+  ✅ *Feito:* kustomize + kubeconform (com schemas de CRD), render do app-of-apps e de `platform/`, yamllint, gitleaks, *Nenhum Secret em claro*, imagem sem `latest`, Gitflow e **Checkov em hard-fail** sobre o overlay renderizado (12 skips justificados no próprio manifesto; `CKV2_K8S_6` como aviso até a S2). O gate foi provado: com `allowPrivilegeEscalation: true` o Checkov sai com 1. Checkov e Gitflow agora são checks **obrigatórios** na `develop` e na `main`.
 - [ ] **C2 · P1 · L — `smoke-e2e.yml`** (cluster **efêmero** no `kind`, como o `cd.yml` da referência), em PR para `main`:
   `kubectl apply -k apps/l2/overlays/ci` → espera `Ready` → `pytest tests/`: health da API, cadastro/login, criar link, `GET /r/{code}` = 302 com `Referrer-Policy: no-referrer`, `/actuator/prometheus` com `l2_travels_total`, **dados sobrevivem a deletar o pod do Postgres**. Despeja logs em caso de falha.
   *Valor extra:* prova que a tag do overlay existe de verdade no GHCR.
