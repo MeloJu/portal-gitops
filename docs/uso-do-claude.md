@@ -55,6 +55,7 @@ humana pegaram falhas que o código gerado escondia**.
 | Service graph do Tempo vazio | Painel "Mapa de serviços" sem dado | Li o chart: os processadores ficam em `overrides.defaults.metrics_generator` |
 | Painel "cliques humanos" | Sob carga marcou 0: o `curl` é classificado como bot pelo User-Agent | Painel conta todas as viagens; a divisão bot/humano fica no gráfico ao lado |
 | G1 marcada como feita | O usuário perguntou se as Gs estavam prontas; a `main` não existia | Status corrigido para parcial |
+| Critério do O7 "deletar um pod faz o contador de reinícios subir" | Testado no k3d: depois do `kubectl delete pod`, `kube_pod_container_status_restarts_total` ficou em 0 (o pod novo nasce com `restartCount` 0); só subiu com `kill 1` no container | Painel "Reinícios" com dois números: containers reiniciados (crash/OOM/liveness) e pods recriados (delete, rollout, HPA) |
 | PodMonitor do Traefik aplicado direto pelo `root` (O4) | O `revisor-pr` apontou que, num cluster novo, o apply roda antes de o kube-prometheus-stack instalar o CRD e criar o namespace; `SkipDryRunOnMissingResource` só pula o dry-run, e o `root` (sem `retry`) ficaria em `Failed` até o próximo commit | PodMonitor movido para `platform/observability/monitors/`, sincronizado pela Application `observability-monitors` (`project: platform`, `CreateNamespace`, `retry`), no padrão dos Issuers do cert-manager |
 
 ## Decisões que o Claude propôs e a equipe aceitou ou mudou
@@ -65,6 +66,11 @@ humana pegaram falhas que o código gerado escondia**.
 - **Janela de 60 s no scale-up do HPA**: o boot da JVM (Spring + Flyway) gerava scale-up em cascata.
 - **Limite de viagens alto só no overlay `local`** (`APP_RATELIMIT_TRAVEL_CAPACITY`): o padrão de 60/min
   por IP trava o loop de cliques antes de gerar CPU para o HPA. Login e cadastro ficam no padrão.
+- **Exemplars (métrica → trace) pelo span-metrics do Tempo, não pelo Micrometer**: o `/actuator/prometheus` responde
+  em OpenMetrics, mas sem nenhum exemplar, porque o agente Java do OTel não entrega SpanContext ao Micrometer. Em vez
+  de esperar uma mudança no `portal-app`, o Tempo envia os exemplars das métricas que gera dos spans
+  (`send_exemplars`), o Prometheus os guarda (`exemplar-storage`) e o painel de latência ganhou um p95 "dos traces"
+  com exemplars, ao lado do p95 do Micrometer. O label do exemplar é `traceID` (o que o Tempo grava), não `trace_id`.
 - **Métricas do Traefik por PodMonitor, não ServiceMonitor** (O4): a porta `metrics` (9100) fica fora
   do Service do Traefik (`expose.default: false`) para não ir parar no LoadBalancer; o Prometheus lê
   direto do pod, por dentro do cluster, como faz com o Actuator. Junto, `asDefault: true` em `web` e
