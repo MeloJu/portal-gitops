@@ -1,0 +1,27 @@
+# Let's Encrypt (HTTP-01): o cert-manager sobe um pod temporário (label abaixo, porta 8089) no namespace
+# do Ingress, e o Traefik precisa alcançá-lo para responder o desafio na porta 80. Com o
+# default-deny do namespace isso dava 502 e o certificado nunca saía. Só existe no Azure: o local usa
+# self-signed (sem desafio).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-acme-solver
+  labels:
+    app.kubernetes.io/part-of: l2
+spec:
+  podSelector:
+    matchLabels:
+      acme.cert-manager.io/http01-solver: "true"
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: traefik
+      ports:
+        - protocol: TCP
+          port: 8089
