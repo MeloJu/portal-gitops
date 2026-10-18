@@ -8,6 +8,7 @@ resources:
   - postgres-pvc.yaml
   - postgres.yaml
   - postgres-podmonitor.yaml
+  - postgres-backup.yaml
   - api.yaml
   - api-hpa.yaml
   - api-pdb.yaml
