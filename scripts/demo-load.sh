@@ -2,7 +2,8 @@
 # Gera a carga das cenas da demo pela API pública (Ingress), sem tocar no cluster.
 #
 #   ./scripts/demo-load.sh setup                 # cria um usuário e alguns links
-#   ./scripts/demo-load.sh cliques               # GET /r/{code} em loop -> HPA da l2-api escala
+#   ./scripts/demo-load.sh seed                  # setup + ~30 s de cliques: a demo já começa com dados
+#   ./scripts/demo-load.sh cliques              # GET /r/{code} em loop -> HPA da l2-api escala
 #   ./scripts/demo-load.sh ameaca                # rajadas de login -> RATE_LIMIT no painel de Ameaças
 #   ./scripts/demo-load.sh --help
 #
@@ -11,12 +12,17 @@ set -euo pipefail
 
 usage() {
   cat <<'EOF'
-uso: demo-load.sh <setup|cliques|ameaca> [opções]
+uso: demo-load.sh <setup|seed|cliques|ameaca> [opções]
 
 Modos
-  setup     Cadastra um usuário (POST /api/auth/register) e cria --links links
-            (POST /api/links). Imprime os códigos e as credenciais.
-  cliques   Dispara GET /r/{code} em loop, com --concurrency workers, por --duration
+  setup     Cadastra um usuário (POST /api/auth/register) e garante --links links ativos
+            (POST /api/links). Imprime os códigos e as credenciais. Pode rodar de novo:
+            se o e-mail já existe (HTTP 409), entra com login e reaproveita os links
+            ativos do usuário, criando só os que faltam.
+  seed      setup + uma rodada curta de cliques (padrão: 30 s, 2 workers), para os painéis
+            do Grafana não começarem vazios. Use com DEMO_EMAIL/DEMO_PASSWORD para ter
+            sempre o mesmo usuário na demo.
+  cliques  Dispara GET /r/{code} em loop, com --concurrency workers, por --duration
             segundos. Sem --codes, roda o setup antes. Acompanhe:
               kubectl -n l2 get hpa l2-api -w
   ameaca    Rajadas de POST /api/auth/login (senha errada) acima do limite de login
@@ -24,17 +30,18 @@ Modos
 
 Opções (cada uma também aceita a variável de ambiente indicada)
   --url URL            BASE_URL      Endereço do Ingress (padrão: http://l2.localhost)
-  --duration SEG       DURATION      Duração (padrão: 180 em cliques, 150 em ameaca)
-  --concurrency N      CONCURRENCY   Workers em paralelo (padrão: 8 em cliques, 20 em ameaca)
+  --duration SEG       DURATION      Duração (padrão: 180 em cliques, 30 em seed, 150 em ameaca)
+  --concurrency N      CONCURRENCY   Workers em paralelo (padrão: 8 em cliques, 2 em seed, 20 em ameaca)
   --burst N            BURST         Logins por rajada no modo ameaca (padrão: 240)
-  --links N            LINKS         Links criados no setup (padrão: 5)
+  --links N            LINKS         Links ativos garantidos no setup (padrão: 5)
   --codes A,B,C        CODES         Códigos já existentes (pula o setup no modo cliques)
   --user-agent UA      USER_AGENT    User-Agent (padrão: um Chrome de desktop; ver abaixo)
   -k, --insecure       INSECURE=1    Aceita o certificado self-signed (URL https:// local)
   -h, --help                         Esta ajuda
 
 Credenciais do setup: DEMO_EMAIL e DEMO_PASSWORD (sem aspas nem barra invertida). Sem elas,
-o script gera um e-mail único e uma senha aleatória e mostra os dois no final.
+o script gera um e-mail único e uma senha aleatória e mostra os dois no final. Com elas, o
+setup e o seed são reproduzíveis e a senha informada não é impressa.
 
 Por que o User-Agent de navegador: a API classifica como bot quem se identifica como curl,
 e o painel "Cliques (viagens) por segundo" separa bot de humano. Para a carga aparecer como
@@ -70,7 +77,7 @@ while (( $# > 0 )); do
     --codes) CODES="${2:?--codes pede um valor}"; shift 2 ;;
     --user-agent) USER_AGENT="${2:?--user-agent pede um valor}"; shift 2 ;;
     -k|--insecure) INSECURE=1; shift ;;
-    setup|cliques|ameaca)
+    setup|seed|cliques|ameaca)
       [[ -z "$MODE" ]] || die "um modo só por vez (já escolhido: $MODE)"
       MODE="$1"; shift ;;
     *) die "argumento desconhecido: $1 (veja --help)" ;;
@@ -87,7 +94,8 @@ INSECURE="${INSECURE:-0}"
 USER_AGENT="${USER_AGENT:-Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36}"
 case "$MODE" in
   ameaca) DURATION="${DURATION:-150}"; CONCURRENCY="${CONCURRENCY:-20}" ;;
-  *)      DURATION="${DURATION:-180}"; CONCURRENCY="${CONCURRENCY:-8}" ;;
+  seed)   DURATION="${DURATION:-30}";  CONCURRENCY="${CONCURRENCY:-2}" ;;
+  *)     DURATION="${DURATION:-180}"; CONCURRENCY="${CONCURRENCY:-8}" ;;
 esac
 for var in DURATION CONCURRENCY BURST LINKS; do
   is_int "${!var}" || die "$var deve ser um inteiro positivo (recebido: '${!var}')"
@@ -111,13 +119,19 @@ trap 'exit 130' INT TERM
 now() { date +%s; }
 
 # Chamada JSON com o cookie de sessão (lumi_session, HttpOnly) num cookie jar.
-# Imprime o status; o corpo fica em $WORK_DIR/resp.
+# Imprime o status; o corpo fica em $WORK_DIR/resp. Sem corpo (GET), não manda --data.
+# Em falha de conexão ou timeout o curl já escreve 000 pelo -w: não somar outro "000".
 api() {
-  local method="$1" path="$2" body="$3"
-  "${CURL[@]}" -X "$method" -H 'Content-Type: application/json' --data "$body" \
+  local method="$1" path="$2" body="${3:-}" data=() status
+  if [[ -n "$body" ]]; then data=(-H 'Content-Type: application/json' --data "$body"); fi
+  status="$("${CURL[@]}" -X "$method" "${data[@]}" \
     -b "$WORK_DIR/cookies" -c "$WORK_DIR/cookies" \
-    -o "$WORK_DIR/resp" -w '%{http_code}' "${BASE_URL}${path}" || echo "000"
+    -o "$WORK_DIR/resp" -w '%{http_code}' "${BASE_URL}${path}")" || true
+  echo "${status:-000}"
 }
+
+# Códigos ("code") presentes na última resposta, um por linha.
+resp_codes() { grep -o '"code" *: *"[^"]*"' "$WORK_DIR/resp" | cut -d'"' -f4 || true; }
 
 setup() {
   local email password name="Demo Load" status code i
@@ -133,19 +147,25 @@ setup() {
     409)
       echo "    e-mail já cadastrado, entrando com login"
       status="$(api POST /api/auth/login "{\"email\":\"${email}\",\"password\":\"${password}\"}")"
+      [[ "$status" != "401" ]] || die "login recusado (HTTP 401): DEMO_PASSWORD não confere com a do cadastro de ${email}"
       [[ "$status" == "200" ]] || die "login falhou (HTTP $status): $(cat "$WORK_DIR/resp" 2>/dev/null)"
       ;;
     000) die "sem resposta de ${BASE_URL} (o cluster e o Ingress estão no ar?)" ;;
     *) die "cadastro falhou (HTTP $status): $(cat "$WORK_DIR/resp" 2>/dev/null)" ;;
   esac
 
-  echo "==> Criando ${LINKS} links"
+  # Reaproveita os links ativos do usuário (rodar o setup de novo não duplica) e cria só os que faltam.
   local codes=()
-  for (( i = 1; i <= LINKS; i++ )); do
+  status="$(api GET "/api/links?state=ACTIVE&size=100")"
+  [[ "$status" == "200" ]] || die "listagem de links falhou (HTTP $status): $(cat "$WORK_DIR/resp" 2>/dev/null)"
+  mapfile -t codes < <(resp_codes | head -n "$LINKS")
+  echo "==> ${#codes[@]} links ativos reaproveitados, criando $(( LINKS - ${#codes[@]} ))"
+  for code in "${codes[@]}"; do echo "    ${BASE_URL}/r/${code}"; done
+  for (( i = ${#codes[@]} + 1; i <= LINKS; i++ )); do
     status="$(api POST /api/links \
       "{\"targetUrl\":\"https://example.com/lumi-demo/${i}\",\"title\":\"Demo load ${i}\"}")"
     [[ "$status" == "201" ]] || die "criação do link $i falhou (HTTP $status): $(cat "$WORK_DIR/resp" 2>/dev/null)"
-    code="$(grep -o '"code" *: *"[^"]*"' "$WORK_DIR/resp" | head -n 1 | cut -d'"' -f4 || true)"
+    code="$(resp_codes | head -n 1)"
     [[ -n "$code" ]] || die "resposta sem 'code': $(cat "$WORK_DIR/resp")"
     codes+=("$code")
     echo "    ${BASE_URL}/r/${code}"
@@ -154,7 +174,7 @@ setup() {
 
   echo
   echo "Usuário: ${email}"
-  echo "Senha:   ${password}"
+  if [[ -n "${DEMO_PASSWORD:-}" ]]; then echo "Senha:   (a de DEMO_PASSWORD)"; else echo "Senha:   ${password}"; fi
   echo "CODES=${CODES}"
 }
 
@@ -240,6 +260,10 @@ threat() {
 
 case "$MODE" in
   setup) setup ;;
+  seed)
+    # seed = o modo cliques com padrões curtos e setup obrigatório (clicks roda o setup sem CODES).
+    [[ -z "$CODES" ]] || die "--codes não combina com seed (o seed sempre roda o setup; use cliques)"
+    clicks ;;
   cliques) clicks ;;
   ameaca) threat ;;
 esac
