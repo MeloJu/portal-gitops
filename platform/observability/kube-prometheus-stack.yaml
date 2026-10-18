@@ -60,6 +60,10 @@ spec:
             path: /
           # Dashboards vêm de ConfigMaps versionados no Git (sidecar do Grafana).
           sidecar:
+            # Sem Alertmanager instalado, o datasource dele só apareceria quebrado.
+            datasources:
+              alertmanager:
+                enabled: false
             dashboards:
               enabled: true
               label: grafana_dashboard

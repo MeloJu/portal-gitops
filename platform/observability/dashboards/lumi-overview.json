@@ -56,7 +56,7 @@
     },
     {
       "id": 2,
-      "title": "Links criados",
+      "title": "Links criados (no período)",
       "type": "stat",
       "datasource": {
         "type": "prometheus",
@@ -70,7 +70,7 @@
       },
       "targets": [
         {
-          "expr": "sum(l2_links_total)",
+          "expr": "sum(increase(l2_links_total[$__range]))",
           "legendFormat": "",
           "refId": "A",
           "datasource": {
@@ -93,7 +93,8 @@
         },
         "colorMode": "value",
         "graphMode": "area"
-      }
+      },
+      "description": "Contador em memória da API: zera quando o pod reinicia. Por isso mostra o aumento no período, não o total do banco."
     },
     {
       "id": 3,
@@ -299,7 +300,7 @@
       },
       "targets": [
         {
-          "expr": "sum(rate(http_server_requests_seconds_count{namespace=\"l2\",uri!~\"/actuator.*\",status=~\"5..\"}[1m])) / clamp_min(sum(rate(http_server_requests_seconds_count{namespace=\"l2\",uri!~\"/actuator.*\"}[1m])), 1e-9)",
+          "expr": "(sum(rate(http_server_requests_seconds_count{namespace=\"l2\",uri!~\"/actuator.*\",status=~\"5..\"}[1m])) or vector(0)) / clamp_min(sum(rate(http_server_requests_seconds_count{namespace=\"l2\",uri!~\"/actuator.*\"}[1m])), 1e-9)",
           "legendFormat": "5xx",
           "refId": "A",
           "datasource": {
@@ -325,7 +326,8 @@
         "tooltip": {
           "mode": "multi"
         }
-      }
+      },
+      "description": "Sem nenhum 5xx a série nem existe; o `or vector(0)` mostra 0 em vez de \"No data\"."
     },
     {
       "id": 8,
