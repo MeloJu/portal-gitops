@@ -1,0 +1,24 @@
+#cloud-config
+# Roda uma vez, no primeiro boot da VM: instala o K3s com a mesma versão do k3d local.
+package_update: true
+packages:
+  - curl
+  - ca-certificates
+  - unattended-upgrades
+
+write_files:
+  # O kubeconfig fica legível só pelo root. A porta 6443 NÃO é aberta no firewall: quem administra usa
+  # túnel SSH (ver terraform/README.md), então a API do Kubernetes nunca fica exposta à internet.
+  - path: /etc/rancher/k3s/config.yaml
+    permissions: "0600"
+    content: |
+      write-kubeconfig-mode: "0600"
+      tls-san:
+        - "${fqdn}"
+        - "127.0.0.1"
+
+runcmd:
+  # Versão fixada: sem isso o instalador pegaria a mais nova e o ambiente divergiria do local.
+  # Traefik, metrics-server e local-path vêm no K3s e são o que o projeto já usa no k3d.
+  - curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION="${k3s_version}" sh -s - server
+  - systemctl enable --now k3s
