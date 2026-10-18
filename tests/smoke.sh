@@ -8,7 +8,8 @@
 #   2. cadastro, criação de link e o redirect 302 com os cabeçalhos de privacidade;
 #   3. a viagem aparece nas métricas (Actuator na 8081, que NÃO é exposto no Ingress);
 #   4. o dado sobrevive à destruição do pod do Postgres (PVC + strategy Recreate);
-#   5. o frontend serve o SPA e repassa /tools/ para a tools-api.
+#   5. o frontend serve o SPA e repassa /tools/ para a tools-api;
+#   6. o CronJob de backup gera um dump válido (pg_restore --list dentro do próprio job).
 set -euo pipefail
 
 NS="${NAMESPACE:-l2}"
@@ -79,6 +80,16 @@ wait_http "http://127.0.0.1:${FE}/healthz" 30 || true
 [ "$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:${FE}/dashboard")" = 200 ] && pass "rota do React Router" || fail "rota do React Router"
 tools="$(curl -s "http://127.0.0.1:${FE}/tools/health")"
 [[ "$tools" == *'"ok"'* ]] && pass "nginx -> tools-api" || fail "nginx -> tools-api: ${tools}"
+
+echo "==> 6. Backup"
+job="smoke-backup-$(date +%s)"
+kubectl -n "$NS" create job --from=cronjob/postgres-backup "$job" >/dev/null
+if kubectl -n "$NS" wait --for=condition=complete "job/$job" --timeout=180s >/dev/null 2>&1; then
+  pass "$(kubectl -n "$NS" logs "job/$job" | grep 'backup ok' | sed 's#/backup/##')"
+else
+  fail "backup: $(kubectl -n "$NS" logs "job/$job" 2>&1 | tail -2 | tr '
+' ' ')"
+fi
 
 rm -f "$jar"
 echo
