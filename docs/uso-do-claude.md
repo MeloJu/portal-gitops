@@ -1,18 +1,99 @@
-# Uso do Claude
+# Claude como parceiro de arquitetura
 
 O enunciado do hackathon prevê o Kiro como copiloto; a organização liberou o **Claude (Claude Code)**
-no lugar. Este documento registra **o que foi pedido, o que foi decidido e o que o Claude errou**,
-para o critério de uso do copiloto. É atualizado junto com o trabalho, não no fim.
+no lugar. Aqui ele não foi usado para "gerar código e torcer": foi um **parceiro de estratégia de
+arquitetura**. A equipe trazia o objetivo e as restrições (prazo, crédito da Azure, o que a banca
+avalia); o Claude lia o código, propunha caminhos com custo e risco, implementava em branch e
+**provava o que afirmava num cluster real**. Quem decidia era a equipe.
 
-## Como o trabalho foi conduzido
+Este documento registra como a parceria funcionou: o combinado, as decisões com as alternativas que
+ficaram de fora, as conversas que mudaram o rumo e **o que o Claude errou e como o erro foi pego**.
+É atualizado junto com o trabalho, não no fim.
 
-1. O Claude **lê antes de escrever**: os três repositórios (`portal-gitops` vazio, o desafio de
-   referência `k8s-postgrest-challenge` e o `portal-app` na `develop`) e o PDF do desafio.
-2. Gera um plano e **pede confirmação** das decisões que mudam o rumo.
-3. Implementa em branch de feature, **valida num cluster real** e só então abre PR.
-4. Os achados da validação voltam para o plano (`TASKS.md`) e para os comentários dos manifests.
+## Como a parceria funciona
 
-## Prompts e resultados
+| Quem | Papel |
+| --- | --- |
+| **Equipe** (Juan, André, Eduardo) | Define objetivo e restrições, **decide**, revisa e aprova PRs. É dona das ações de alto impacto: credenciais, gasto de crédito, exposição na internet, proteção de branch |
+| **Claude** | Lê antes de propor; apresenta **opções com trade-offs** e recomenda uma; implementa em branch; valida em cluster real; registra o que provou e o que **não** provou |
+
+Regras que seguimos (e que o Claude cumpre sem precisar ser lembrado):
+
+1. **Ler antes de escrever.** Os três repositórios e o PDF do desafio foram lidos antes do primeiro plano.
+2. **Opções, não uma resposta só.** Toda decisão relevante chega com alternativas, custo e uma
+   recomendação justificada.
+3. **Nada é "feito" sem prova.** No `TASKS.md` uma task só vira `[x]` depois de validada; o que só
+   renderiza ou só passa em teste fica `◐ parcial`, com o que falta dito.
+4. **Mudança só pelo Git.** Um `kubectl patch` à mão é desfeito pelo ArgoCD, então a correção vai por
+   PR, e cada PR diz **como foi validado** (comando e resultado).
+5. **Alto impacto exige autorização explícita do dono.** `terraform apply` (gasta crédito), login na
+   Azure (feito pelo próprio dono, nenhuma credencial passou pelo Claude), expor o Grafana na
+   internet, enviar a chave do VirusTotal para a nuvem, trocar a proteção de branch ou a branch
+   padrão. Em vários desses casos o Claude parou e pediu, em vez de seguir adiante.
+6. **Revisão humana vale mais que a do Claude.** O André pegou uma falha de segurança que o Claude
+   deixou passar (ver a tabela de erros). Desde então o Claude confere o diff inteiro antes de mergear.
+
+## Registro de decisões
+
+Formato resumido de ADR: o que estava em jogo, o que foi considerado, o que foi escolhido e **por quê**.
+
+| # | Decisão | Alternativas consideradas | Escolha e motivo | Quem decidiu | Prova |
+| --- | --- | --- | --- | --- | --- |
+| D1 | Kubernetes: **k3d/K3s** local e K3s na VM | `kind`, minikube, AKS | O K3s já traz Traefik, metrics-server e aplica NetworkPolicy; a **mesma versão** (v1.35.5+k3s1) roda no local e na nuvem. O AKS exigiria ao menos 2 VMs, o dobro do custo num crédito de estudante. O `kind` ficou só no CI (cluster descartável) | Equipe, sobre proposta do Claude | Mesma versão nos dois ambientes; smoke test passando em ambos |
+| D2 | Postgres como **Deployment + PVC, `strategy: Recreate`** | StatefulSet, operador (CloudNativePG) | Arquitetura trazida pela equipe. O Claude mostrou que o PVC é `ReadWriteOnce`: com rolling update o pod novo esperaria um volume que o antigo ainda segura. **Alta disponibilidade ficou fora e é dita como limitação** | Equipe | Smoke test mata o pod do banco e o dado sobrevive |
+| D3 | Segredos: **script no local, SealedSecret na nuvem** | SealedSecret em tudo, SOPS, Secret no Git | Um SealedSecret só abre no cluster que o selou, então não serve para o cluster local de cada pessoa | Claude propôs, equipe aceitou | SealedSecret aberto na VM real; escopo e perda/restauração da chave testados |
+| D4 | Entrega: **PR de bump com auto-merge** | Push direto na `develop`, atualizador automático de imagem | Push direto pediria uma exceção na proteção de branch. Com PR o deploy passa pelos mesmos checks e fica registrado: **rastreabilidade acima de simplicidade** | Claude propôs, equipe aceitou; o dono ajustou o token | portal-app #70 → portal-gitops #13, sem comando manual |
+| D5 | Rota pública **`/otlp`** com 4 camadas | Não expor; sobrescrever `service.name` no pipeline único | Só a rota de traces, limite de taxa, limite de corpo e um **receiver separado** que força `service.name`. Sobrescrever no pipeline único apagaria também o nome da API | Claude desenhou, equipe revisou | Enviado `service.name=l2-api`; o Tempo guardou `l2-frontend` |
+| D6 | **Rate limit em duas camadas** | Só Traefik, só na API | Traefik (grosso, 200 req/s) protege o cluster; a API (fino, 60/min) gera o evento de "Ameaça" no painel. Limite da API é por pod: **limitação dita** | Claude propôs, equipe aceitou | Rajada acima do limite recebe `429` no Traefik; logins errados em sequência recebem `429` na API e aparecem no painel de Ameaças |
+| D7 | **Rede deny-by-default**; a tools-api só sai para IP público | Liberar tudo | A tools-api busca URLs que o usuário escolhe: é o maior risco de SSRF | Equipe | Alcança `example.com`; bloqueada para Postgres, Actuator, metadados de nuvem e API do Kubernetes |
+| D8 | Nuvem: **Azure** (o Oracle foi descartado) | Oracle Free Tier | Decisão da equipe (assinatura estudantil). O Claude **mediu** SKU, quota e preço na conta real e corrigiu a própria recomendação (ver discussão 1) | Equipe | `terraform apply` real: 10 recursos, nó `Ready` |
+| D9 | NSG na **sub-rede**, com `depends_on` | NSG na NIC | O Trivy apontou e o `terraform graph` mostrou o problema real: a VM, com IP público, podia subir antes do firewall | Claude, a partir do achado | Grafo corrigido; o resto do alerta virou falso positivo justificado no código |
+| D10 | **A nuvem segue a `main`; o local segue a `develop`** | Ambos na `develop`; bump automático também na nuvem | Produção só muda por PR de release. As imagens são promovidas por script (`promover-imagens-azure.sh`), nunca vão direto | Ideia do dono, implementada pelo Claude | Correção do Grafana: #47 → release #48 → ArgoCD da nuvem aplicou sozinho |
+| D11 | **Grafana público com login; Prometheus e Tempo só por túnel** | Tudo público; nada público | O dono quis ver os gráficos no navegador. O Prometheus aceita escrita (`remote-write`) e nenhum dos dois tem login, então só o Grafana sai, com HTTPS e senha aleatória | Dono, depois de discutir os riscos | `https://…/grafana/login` responde 200 com certificado válido |
+| D12 | Domínio: **DuckDNS**, com o nome da Azure de reserva | Domínio pago, Student Pack, is-a.dev | A Azure não vende domínio com crédito estudante; o uso é de poucos dias. O mesmo certificado cobre os dois nomes | Dono | Let's Encrypt emitido para ambos; `shortUrl` sai no domínio novo |
+
+## Conversas que mudaram o rumo
+
+**1. "Qual VM a gente usa?"** O Claude recomendou a `Standard_B2ms`, com preços de calculadoras de
+terceiros. Ao medir na assinatura real, a série B **nem existe** em `brazilsouth`, o preço lá é ~2× o
+dos EUA, o crédito dura 27 dias com a VM ligada 24 h, e as famílias novas têm quota zero. A
+recomendação mudou para a `Standard_D2s_v4`, a VM passou a **nascer desligável** (auto-shutdown às
+23h) e a regra virou: *meça antes de recomendar*.
+
+**2. "O SSH pode ficar aberto?"** O Claude escreveu uma validação que recusava `0.0.0.0/0` e afirmou, no
+PR, que o SSH aberto ao mundo era barrado. O **André revisou e mostrou** que `0.0.0.0/1` (metade da
+internet), `1.2.3.4/0` e qualquer `/8` passavam. A regra passou a aceitar só IPv4 de `/24` a `/32`, com
+14 testes, que o Claude colocou no CI. A lição ficou como prática: testar a *classe* do problema, não só o exemplo.
+
+**3. "Push direto ou PR?"** O push direto era mais simples, mas exigiria deixar o robô pular a proteção de
+branch. Escolhemos o PR com auto-merge: mais lento, porém o deploy passa pelo mesmo crivo de um humano.
+A discussão voltou quando o primeiro bump falhou por permissão do token (o dono corrigiu) e quando um
+"sucesso" do job se mostrou vazio ("nada a propor"): só um commit novo provou a criação do PR.
+
+**4. "Expor telemetria do navegador não é um risco?"** É, e a conversa foi sobre **onde** colocar cada
+defesa. O desenho final tem quatro camadas (rota única, taxa, tamanho e receiver separado) e foi
+testado tentando se passar pela API.
+
+**5. "Dá para ver o Grafana no navegador?"** Dá, mas é uma tela de administração pública. Conversamos
+sobre o risco (varredura automática, tentativa de senha, informação interna), as defesas (HTTPS, senha
+aleatória, bloqueio de conta) e a alternativa (túnel SSH). O dono decidiu abrir **só o Grafana**.
+
+**6. "Qual branch a produção segue?"** A ideia de a nuvem seguir a `main` veio do dono e corresponde ao
+que se faz em produção: o que chega lá passou por um release. O Claude implementou e mostrou a
+consequência: um merge na `develop` **não** vai mais direto à nuvem. É o objetivo, com um passo a mais.
+
+## Como validamos
+
+- **Cluster real antes de PR.** O Claude testa em k3d (e depois na VM) o que escreve. Foi assim que se
+  achou o `Prefix` do Traefik tratando prefixo como texto e roubando links curtos.
+- **Sabotar para provar.** Os checks são testados quebrando de propósito: com a sabotagem o Checkov
+  sai com `exit 1`; sem ela, `exit 0`. Um teste que nunca falhou não prova nada.
+- **Teste de regressão para cada bug.** A ordem dos imports da telemetria, a validação do CIDR e os
+  alertas (`promtool`) têm teste que falha se o problema voltar.
+- **Honestidade sobre o limite.** O que não foi provado vai dito: `terraform plan` com credencial falsa
+  "quase validou"; o Claude disse o que **não** tinha verificado.
+
+## Linha do tempo dos pedidos
 
 | # | Pedido (resumo fiel) | Resultado |
 | --- | --- | --- |
@@ -36,6 +117,9 @@ para o critério de uso do copiloto. É atualizado junto com o trabalho, não no
 | 18 | "instala o Azure CLI e também pode fazer essas coisas aí, só me fala onde colocar as credenciais" | CLI instalada; login feito **por você** no navegador (nenhuma credencial passou por mim); consulta das regras da assinatura; registro dos provedores; chave SSH, `terraform.tfvars` ignorado pelo Git e `terraform plan` real |
 | 19 | "pode dar o apply, depois me ensina a rodar o projeto" e "pode fazer essas coisas e ensina a ver na nuvem" | `terraform apply` real (10 recursos, K3s `Ready`); overlay, app-of-apps, Let's Encrypt e scripts de acesso por túnel SSH (PRs #37 a #39); SealedSecret do primeiro uso real; smoke test completo contra a VM |
 | 20 | "tem o .env na pasta do desafio3, precisa subir isso?" e "testa se a API do VirusTotal está funcionando" | O Claude listou **só os nomes** das variáveis (sem os valores) e concluiu que o `.env` nunca vai para o Git; o que faltava era a `VT_API_KEY` no cluster. Selá-la para a nuvem foi **bloqueado pelo modo automático** (origem sensível) e ficou como decisão do usuário |
+| 21 | "vou pegar o DuckDNS, preciso do HTTPS" e "linka o Argo com a `main` pras mudanças irem automaticamente" | Certificado Let's Encrypt para o DuckDNS e para o nome da Azure (PR #50); a nuvem passa a seguir a `main`, com script de promoção de imagens (PR #44, release #45); correção do Grafana (OOM) chegando à nuvem só pelo fluxo de release |
+| 22 | "tira o `CLAUDE.md` e o `PITCH.md` do repositório" | Os dois saem do Git (PR #52, release #53), com os links do README e do `TASKS.md` corrigidos |
+| 23 | "refaz o README dos dois repositórios e refaz o que o Claude fez, como parceiro de arquitetura" | Este documento e os dois READMEs, no molde do desafio de referência |
 
 ## O que o Claude errou (e como foi pego)
 
@@ -89,7 +173,7 @@ humana pegaram falhas que o código gerado escondia**.
 | Critério do O7 "deletar um pod faz o contador de reinícios subir" | Testado no k3d: depois do `kubectl delete pod`, `kube_pod_container_status_restarts_total` ficou em 0 (o pod novo nasce com `restartCount` 0); só subiu com `kill 1` no container | Painel "Reinícios" com dois números: containers reiniciados (crash/OOM/liveness) e pods recriados (delete, rollout, HPA) |
 | PodMonitor do Traefik aplicado direto pelo `root` (O4) | O `revisor-pr` apontou que, num cluster novo, o apply roda antes de o kube-prometheus-stack instalar o CRD e criar o namespace; `SkipDryRunOnMissingResource` só pula o dry-run, e o `root` (sem `retry`) ficaria em `Failed` até o próximo commit | PodMonitor movido para `platform/observability/monitors/`, sincronizado pela Application `observability-monitors` (`project: platform`, `CreateNamespace`, `retry`), no padrão dos Issuers do cert-manager |
 
-## Decisões que o Claude propôs e a equipe aceitou ou mudou
+## Decisões de detalhe (propostas pelo Claude; a equipe aceitou ou mudou)
 
 - **Secret no local criado pelo script, não SealedSecret**: um SealedSecret só abre no cluster que o
   selou, então commitar um para o cluster local não serviria aos outros membros.
@@ -117,7 +201,3 @@ humana pegaram falhas que o código gerado escondia**.
   dono incluiu `Terraform (fmt, validate, scan)` nos `required_status_checks.contexts` de `develop` e `main`
   (9 checks) e o agente só registrou a evidência no `TASKS.md`.
 
-## Próximas entradas
-
-Observabilidade (OpenTelemetry, Tempo, Prometheus, Grafana), overlay `oracle`, Terraform e o pipeline
-de imagens do `portal-app`: registrar aqui conforme forem feitos.
