@@ -13,9 +13,13 @@ variable "location" {
 }
 
 variable "vm_size" {
-  description = "Tamanho da VM. B2ms = 2 vCPU / 8 GB, o mínimo confortável para K3s + ArgoCD + observabilidade (~4,1 GB em uso)."
+  description = <<-EOT
+    Tamanho da VM: precisa de 2 vCPU e 8 GB (o projeto usa ~4,1 GB com K3s + ArgoCD + observabilidade).
+    Standard_D2s_v4 é o que a assinatura estudantil deixa criar em brazilsouth (medido em out/2026): a série B
+    não existe lá, e as famílias v5/v6/v7 têm quota 0. Confira a SUA com `az vm list-skus` e `az vm list-usage`.
+  EOT
   type        = string
-  default     = "Standard_B2ms"
+  default     = "Standard_D2s_v4"
 }
 
 variable "name_prefix" {

@@ -4,7 +4,7 @@ Uma VM Ubuntu 24.04 com **K3s** (o mesmo Kubernetes do k3d local, na mesma vers�
 deixa entrar 80 e 443. Pensado para a **assinatura estudantil** (crédito limitado), com desligamento automático.
 
 ```
-internet --80/443--> IP público estático --> NSG da sub-rede --> VM Standard_B2ms (2 vCPU / 8 GB)
+internet --80/443--> IP público estático --> NSG da sub-rede --> VM Standard_D2s_v4 (2 vCPU / 8 GB)
 você ------22------> (só do SEU IP) -----------------------------> SSH + túnel para o kubectl
 ```
 
@@ -13,7 +13,7 @@ você ------22------> (só do SEU IP) -----------------------------> SSH + túne
 | Resource group, VNet, sub-rede | `10.20.0.0/16`, isolado |
 | IP público **estático** + nome DNS grátis | `l2-xxxxx.<região>.cloudapp.azure.com`, serve de endereço e de nome para o Let's Encrypt (sem comprar domínio) |
 | NSG na **sub-rede** | só `80`, `443` e `22` (este, **apenas do seu IP**). A API do Kubernetes (6443), o Actuator, o Prometheus e o Grafana **não** são expostos |
-| VM `Standard_B2ms` | login **só por chave SSH**, disco Standard SSD de 64 GB |
+| VM `Standard_D2s_v4` | login **só por chave SSH**, disco Standard SSD de 64 GB |
 | K3s `v1.35.5+k3s1` | instalado por cloud-init; Traefik, metrics-server e local-path vêm junto |
 | Desligamento diário às 23h | protege o crédito de uma VM esquecida ligada |
 
@@ -24,23 +24,35 @@ você ------22------> (só do SEU IP) -----------------------------> SSH + túne
 
 ## 1. Antes de aplicar: o que a SUA assinatura permite
 
-A assinatura estudantil limita regiões, tamanhos de VM e vCPUs, e isso **varia de pessoa para pessoa**.
-No portal da Azure, abra o **Cloud Shell** (Bash) e rode:
+A assinatura estudantil limita regiões, tamanhos de VM e vCPUs, e isso **varia de pessoa para pessoa**. Medido na
+assinatura "Azure for Students" em outubro de 2026:
+
+| O que | Resultado |
+| --- | --- |
+| Regiões permitidas (policy) | `brazilsouth`, `spaincentral`, `italynorth`, `mexicocentral`, `francecentral` |
+| Série **B** (burstable, a mais barata) | **não existe** em `brazilsouth` |
+| `spaincentral` e `mexicocentral` | todos os tamanhos `NotAvailableForSubscription` |
+| Quota em `brazilsouth` | **6 vCPUs no total**; famílias `v5`, `v6`, `v7` com **quota 0**; `Dsv4`, `Dv4`, `DDv4`, `DDSv4` com 4 |
+| **Escolhida** | **`Standard_D2s_v4`** (2 vCPU / 8 GB), liberada, família `Dsv4` com quota 4 |
+
+A quota é **por família**: um tamanho aparecer "liberado" não basta, a família dele precisa ter quota. Para conferir a
+sua, no PowerShell ou no Cloud Shell:
 
 ```bash
-# regiões permitidas (a policy "Allowed resource deployment regions")
 az policy assignment list --query "[?contains(displayName,'region')].{nome:displayName, regioes:parameters.listOfAllowedLocations.value}" -o json
-
-# a B2ms existe e está liberada na região escolhida?
-az vm list-skus --location brazilsouth --size Standard_B2 --query "[].{tamanho:name, restricao:restrictions[0].reasonCode}" -o table
-
-# quota de vCPU
-az vm list-usage --location brazilsouth --query "[?contains(name.value,'cores') || contains(name.value,'standardB')].{nome:name.localizedValue, usado:currentValue, limite:limit}" -o table
+az vm list-skus --location brazilsouth --size Standard_D2s_v4 --query "[].{tamanho:name, restricao:restrictions[0].reasonCode}" -o table
+az vm list-usage --location brazilsouth --query "[?contains(name.value,'standardDSv4Family') || name.value=='cores'].{nome:name.localizedValue, usado:currentValue, limite:limit}" -o table
 ```
 
-Se `brazilsouth` não estiver na lista, use outra região permitida em `location`. Se a B2ms aparecer com
-restrição, escolha `vm_size = "Standard_B2als_v2"` **só** se aceitar 4 GB (não recomendado: o projeto usa ~4,1 GB)
-ou `Standard_B4als_v2` (4 vCPU / 8 GB, mais cara).
+**Provedores de recurso:** uma assinatura nova vem com `Microsoft.Compute`, `Network`, `DevTestLab` e `Storage` como
+`NotRegistered` (e a consulta de quota volta vazia). Registre antes do `apply` (é grátis):
+
+```bash
+az provider register --namespace Microsoft.Compute
+az provider register --namespace Microsoft.Network
+az provider register --namespace Microsoft.DevTestLab
+az provider register --namespace Microsoft.Storage
+```
 
 ## 2. Aplicar
 
@@ -73,11 +85,16 @@ kubectl get nodes
 
 ## Custo e como não gastar o crédito à toa
 
-| O que | Custo |
+Preços de **Brazil South** (tabela pública de preços da Azure, Linux, sob demanda, out/2026). Bem acima dos EUA:
+
+| Cenário | Custo |
 | --- | --- |
-| VM ligada (B2ms, ~US$ 0,08/h, **confira na [calculadora](https://azure.microsoft.com/pricing/calculator/)**) | ~US$ 60 por mês ligada 24 h |
-| VM **desligada (deallocate)** | não cobra CPU nem RAM; disco e IP seguem cobrando uns poucos dólares por mês |
-| Desligamento automático | todo dia às 23h (`auto_shutdown_time`), a menos que você ponha `auto_shutdown_enabled = false` |
+| `Standard_D2s_v4`, **ligada 24 h** | ~US$ 0,153/h → **~US$ 112/mês**; o crédito de US$ 100 dura **~27 dias** |
+| Ligada **6 h por dia** (ensaios e apresentação) | ~US$ 28/mês |
+| **Desligada (deallocate)** | não cobra CPU nem RAM; disco (~US$ 5) e IP estático (~US$ 4) seguem cobrando |
+| Desligamento automático | todo dia às 23h (`auto_shutdown_time`); a VM **não liga sozinha**, você liga quando for usar |
+
+**Deixe desligada por padrão** e ligue só para ensaiar e apresentar.
 
 ```bash
 terraform output -raw parar_vm | bash    # desliga já (deallocate, não é só "stop")

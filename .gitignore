@@ -24,3 +24,7 @@ crash.log
 # script scripts/sealed-secrets-key.sh (um padrão sem extensão o ignorava junto).
 sealed-secrets-key*.yaml
 *-key-backup*.yaml
+
+# Plano do Terraform (pode carregar valores sensíveis)
+tfplan
+*.tfplan
