@@ -49,6 +49,15 @@ patches:
       metadata:
         name: ratelimit
   - target:
+      kind: PodMonitor
+      name: postgres
+    patch: |-
+      $patch: delete
+      apiVersion: monitoring.coreos.com/v1
+      kind: PodMonitor
+      metadata:
+        name: postgres
+  - target:
       kind: ServiceMonitor
       name: l2-api
     patch: |-

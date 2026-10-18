@@ -7,6 +7,7 @@ resources:
   - service-accounts.yaml
   - postgres-pvc.yaml
   - postgres.yaml
+  - postgres-podmonitor.yaml
   - api.yaml
   - api-hpa.yaml
   - api-pdb.yaml
