@@ -12,6 +12,9 @@ apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: l2
+  annotations:
+    # Camada grossa de rate limit (ver ratelimit.yaml). Formato: <namespace>-<nome>@kubernetescrd.
+    traefik.ingress.kubernetes.io/router.middlewares: l2-ratelimit@kubernetescrd
   labels:
     app.kubernetes.io/name: l2
     app.kubernetes.io/part-of: l2

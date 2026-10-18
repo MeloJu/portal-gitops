@@ -39,10 +39,11 @@ patches:
         value: l2.localhost
       # HTTPS com certificado self-signed emitido pelo cert-manager (o navegador vai avisar).
       # O HTTP continua respondendo: não há redirect no local, para a demo não depender do aviso.
+      # Adiciona SÓ esta chave: `add /metadata/annotations` com um mapa substituiria as anotações da base
+      # (e o middleware de rate limit sumiria). No JSON Pointer, a "/" do nome da chave vira "~1".
       - op: add
-        path: /metadata/annotations
-        value:
-          cert-manager.io/cluster-issuer: selfsigned
+        path: /metadata/annotations/cert-manager.io~1cluster-issuer
+        value: selfsigned
       - op: add
         path: /spec/tls
         value:

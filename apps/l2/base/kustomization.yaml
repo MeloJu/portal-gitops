@@ -14,6 +14,7 @@ resources:
   - tools-api.yaml
   - frontend.yaml
   - ingress.yaml
+  - ratelimit.yaml
   - network-policies.yaml
 
 # ConfigMap com hash no nome: mudar um valor reinicia a API sozinho (ver l2-config.env).
