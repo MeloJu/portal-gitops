@@ -28,10 +28,10 @@ arquitetura e os riscos estão em [`TASKS.md`](TASKS.md).
 
 > **Estado atual.** ✅ pronto e validado em cluster real · 🚧 planejado, ver [`TASKS.md`](TASKS.md)
 >
-> ✅ aplicação no Kubernetes (API, banco, frontend, tools-api, Ingress, HPA) · ✅ ArgoCD sincronizando o repositório ·
+> ✅ Sealed Secrets (controller + scripts) · ✅ aplicação no Kubernetes (API, banco, frontend, tools-api, Ingress, HPA) · ✅ ArgoCD sincronizando o repositório ·
 > ✅ CI de PR (kustomize, kubeconform, yamllint, gitleaks) ·
 > 🚧 imagens publicadas pelo `portal-app` com bump automático · 🚧 OpenTelemetry, Tempo, Prometheus e Grafana ·
-> 🚧 NetworkPolicies, Sealed Secrets e TLS · 🚧 overlay `oracle` e `terraform/`
+> 🚧 NetworkPolicies e TLS · 🚧 overlay `oracle` e `terraform/`
 
 ## 🏗️ Arquitetura
 
@@ -192,6 +192,7 @@ k3d cluster delete l2        # remove o cluster inteiro
 | --- | --- |
 | [`TASKS.md`](TASKS.md) | Plano por épico, decisões de arquitetura, riscos e checklist de entregáveis |
 | [`docs/uso-do-claude.md`](docs/uso-do-claude.md) | Como o Claude foi usado: prompts, decisões e o que ele errou |
+| [`docs/sealed-secrets.md`](docs/sealed-secrets.md) | Segredo no Git: como selar, escopo, **backup da chave** e o que foi comprovado em cluster |
 | [`apps/l2/base/`](apps/l2/base) | Os manifests, com o *porquê* de cada decisão nos comentários |
 | `docs/ci-cd.md`, `docs/hardening.md`, `docs/observabilidade.md` | 🚧 a escrever junto com cada marco |
 
@@ -232,11 +233,12 @@ portal-gitops/
 │   ├── 📂 base/              # manifests da aplicação (namespace l2)
 │   └── 📂 overlays/          # local (k3d, segue develop) · ci (kind efêmero) · oracle 🚧
 ├── 📂 bootstrap/             # ArgoCD (versão fixada) + app-of-apps
-├── 📂 scripts/               # bootstrap-local.sh, load-local-images.sh
+├── 📂 platform/              # camada de plataforma via ArgoCD (sealed-secrets; o resto 🚧)
+├── 📂 scripts/               # bootstrap-local.sh, load-local-images.sh, seal-secret.sh, sealed-secrets-key.sh
 ├── 📂 docs/                  # uso do Claude, e a documentação dos marcos
 ├── 📂 .github/workflows/     # pr-validate.yml
 ├── 📄 TASKS.md               # plano do projeto
-└── 📂 platform/ · terraform/ # 🚧 observabilidade, cert-manager, sealed-secrets · Oracle Cloud
+└── 📂 terraform/             # 🚧 Oracle Cloud
 ```
 
 ## ⚙️ CI/CD

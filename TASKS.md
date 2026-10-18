@@ -222,7 +222,8 @@ main      ← Oracle (ArgoCD lê main → overlays/oracle)
 - [x] **P1 · P0 · M — `scripts/bootstrap-local.sh` idempotente:** cria cluster k3d (80/443 mapeadas), instala ArgoCD e aplica a *root Application* (app-of-apps). Estilo do `setup.sh` da referência.
   *Pronto quando:* script em máquina limpa deixa o ArgoCD puxando este repo.
   ✅ *Feito:* cluster k3d + ArgoCD + Secret + app-of-apps; testado do zero.
-- [ ] **P2 · P0 · M — Sealed Secrets** como Application do ArgoCD (Helm, versão fixada, sync-wave baixa) + `docs` de como selar e **como fazer backup da chave do controller** (perdeu a chave, perdeu os segredos).
+- [x] **P2 · P0 · M — Sealed Secrets** como Application do ArgoCD (Helm, versão fixada, sync-wave baixa) + `docs` de como selar e **como fazer backup da chave do controller** (perdeu a chave, perdeu os segredos).
+  ✅ *Feito:* controller via ArgoCD (chart 2.20.0), projeto `platform`, `scripts/seal-secret.sh` e `scripts/sealed-secrets-key.sh`. Testado em cluster: selar → abrir, escopo strict (outro namespace falha) e perda/restauração da chave. Ver [`docs/sealed-secrets.md`](docs/sealed-secrets.md).
 - [ ] **P3 · P0 · M — cert-manager** (Helm via ArgoCD) + `ClusterIssuer`: self-signed no local, Let's Encrypt (HTTP-01) no oracle.
 - [ ] **P4 · P0 · S — metrics-server** garantido (K3s traz; HPA depende dele — a referência já documentava isso).
 - [ ] **P5 · P0 · M — App-of-apps:** root Application em `bootstrap/` → `apps/` e `platform/`; `AppProject l2` limitando repo de origem e namespaces; `sync-waves` (CRDs/plataforma → app), `SkipDryRunOnMissingResource` para CRs de CRD recém-instalada, `ignoreDifferences` em `spec.replicas` do que tiver HPA.
