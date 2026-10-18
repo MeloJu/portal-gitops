@@ -12,6 +12,16 @@ resources:
   - l2.yaml
 
 patches:
+  # O Azure segue a `main` (produção), não a `develop`. As Applications da plataforma são
+  # compartilhadas com o local e apontam para a `develop`; aqui só as que leem ESTE repositório
+  # mudam (as de Helm leem a versão do chart, que não depende de branch).
+  - target:
+      kind: Application
+      name: "(cert-manager-issuers|observability-dashboards|observability-monitors|observability-otlp|traefik-config)"
+    patch: |-
+      - op: replace
+        path: /spec/source/targetRevision
+        value: main
   # Let's Encrypt no lugar do self-signed.
   - target:
       kind: Application

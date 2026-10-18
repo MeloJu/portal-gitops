@@ -99,11 +99,32 @@ A VM desliga sozinha às 23h. Para parar a cobrança de CPU na hora: `az vm deal
 (o `shutdown` de dentro da VM **não** para a cobrança). Para religar: `az vm start -g l2-rg -n l2-vm`.
 O IP é estático e o DNS não muda. O `terraform destroy` apaga tudo, **inclusive o banco**.
 
-## Imagens: promoção deliberada
+## Do commit à nuvem: o Azure segue a `main`
 
-O bump automático do pipeline edita só o overlay `local`. O overlay `azure` tem o próprio bloco
-`images:`, atualizado à mão (copiando do `local`) depois que a versão provou-se lá: é o embrião do
-gate de promoção (task D5). O ArgoCD da VM segue a `develop`.
+O Azure é a "produção". O ArgoCD da VM lê a **`main`**; o cluster local lê a **`develop`**. Nada vai
+para a nuvem por push direto: só por um PR de release.
+
+```
+portal-app (develop) ──CI/CD──► PR de bump ──► portal-gitops develop ──► ArgoCD LOCAL (k3d) testa
+                                                       │
+                       ./scripts/promover-imagens-azure.sh  (copia as imagens do local para o azure)
+                                                       ▼
+                         PR de release develop ──► main ──► ArgoCD AZURE aplica sozinho (~3 min)
+```
+
+| Mudança | Como chega à nuvem |
+| --- | --- |
+| Manifests (`apps/l2/base`, `platform/`, `overlays/azure`, `bootstrap/apps/azure`) | PR para a `develop` e, quando testado, PR de release `develop` → `main` |
+| Imagens novas do `portal-app` | o bump cai na `develop` (local); rode `./scripts/promover-imagens-azure.sh`, abra o PR e faça o release para a `main` |
+| Segredos (SealedSecret) | mesmo caminho: PR e release |
+| `terraform/` (VM, rede, firewall) | `terraform apply` (o ArgoCD não toca na infraestrutura) |
+| O próprio ArgoCD e o `root` | `./scripts/bootstrap-azure.sh` (idempotente) |
+
+`./scripts/promover-imagens-azure.sh --check` diz se o Azure está atrás do local. **Rollback** é um
+`git revert` na `main`. O gate de promoção completo (verificar as 3 tags antes do release) é a task D5.
+
+Mudar de `develop` para `main` num cluster que já roda exige reaplicar o `root` uma vez
+(`./scripts/bootstrap-azure.sh`), porque a Application `root` é criada à mão.
 
 ## Chave do VirusTotal (opcional)
 

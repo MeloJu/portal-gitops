@@ -9,9 +9,9 @@ spec:
   project: l2
   source:
     repoURL: https://github.com/MeloJu/portal-gitops.git
-    # Por enquanto o Azure também segue a `develop` (um time pequeno, sem ambiente de produção
-    # separado). Quando houver gate de promoção (D5), isto passa a ser `main`.
-    targetRevision: develop
+    # O Azure é a "produção": segue a `main`, que só muda por PR de release vindo da `develop`
+    # (o local segue a `develop`). Ver docs/azure.md, "Do commit à nuvem".
+    targetRevision: main
     path: apps/l2/overlays/azure
   destination:
     server: https://kubernetes.default.svc
