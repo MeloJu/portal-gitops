@@ -8,7 +8,7 @@ adaptando o desafio de referência [`k8s-postgrest-challenge`](https://github.co
 > Repo de destino: `https://github.com/MeloJu/portal-gitops`. A árvore abaixo usa o layout "l2-gitops" combinado.
 > **Copiloto de IA:** o enunciado do desafio cita o Kiro, mas a organização liberou o **Claude** no lugar. O uso é registrado em `docs/uso-do-claude.md` (critério "Uso do copiloto", 10% da nota).
 > **Escopo atual:** só o cluster **local**. O ambiente Oracle (e o que depende dele: Let's Encrypt, SealedSecret de produção, Terraform) foi adiado.
-> **Progresso:** 45 de 62 tasks feitas · faltam 12 no escopo atual (P0: 0 · P1: 4 · P2: 8) · 5 adiadas (Oracle/Terraform). Atualizado a cada PR que fecha task.
+> **Progresso:** 46 de 62 tasks feitas · faltam 11 no escopo atual (P0: 0 · P1: 3 · P2: 8) · 5 adiadas (Oracle/Terraform). Atualizado a cada PR que fecha task.
 > **Status:** M1 e a plataforma local (P1–P6) feitos e mergeados na `develop`; G1–G4 feitos. Próximo: observabilidade (O1–O7). Legenda das notas: ✅ feito · ◐ parcial · ⏸ adiado.
 > Legenda: **P0** = sem isso não há demo · **P1** = nota alta · **P2** = diferencial. Tamanho: **S** (<1h) · **M** (1–3h) · **L** (>3h).
 
@@ -283,9 +283,10 @@ Actions pinadas **por SHA com comentário de versão**, `permissions: contents: 
   1. `yamllint` · 2. `kustomize build` de **cada overlay** · 3. `kubeconform -strict` (com schemas de CRD: Traefik, Argo, cert-manager, Sealed Secrets) · 4. **Checkov/kube-linter** (começar soft-fail como a referência, endurecer depois) · 5. **`gitleaks` + `check-config-secrets.sh`** (copiar do `portal-app`; **é o que barra Secret em claro**, com exceção explícita do `overlays/ci`) · 6. política: sem `latest`, com requests/limits, não-root.
   *Pronto quando:* PR com manifest quebrado ou Secret em claro fica vermelho; PR correto, verde.
   ✅ *Feito:* kustomize + kubeconform (com schemas de CRD), render do app-of-apps e de `platform/`, yamllint, gitleaks, *Nenhum Secret em claro*, imagem sem `latest`, Gitflow e **Checkov em hard-fail** sobre o overlay renderizado (12 skips justificados no próprio manifesto; `CKV2_K8S_6` como aviso até a S2). O gate foi provado: com `allowPrivilegeEscalation: true` o Checkov sai com 1. Checkov e Gitflow agora são checks **obrigatórios** na `develop` e na `main`.
-- [ ] **C2 · P1 · L — `smoke-e2e.yml`** (cluster **efêmero** no `kind`, como o `cd.yml` da referência), em PR para `main`:
+- [x] **C2 · P1 · L — `smoke-e2e.yml`** (cluster **efêmero** no `kind`, como o `cd.yml` da referência), em PR para `main`:
   `kubectl apply -k apps/l2/overlays/ci` → espera `Ready` → `pytest tests/`: health da API, cadastro/login, criar link, `GET /r/{code}` = 302 com `Referrer-Policy: no-referrer`, `/actuator/prometheus` com `l2_travels_total`, **dados sobrevivem a deletar o pod do Postgres**. Despeja logs em caso de falha.
   *Valor extra:* prova que a tag do overlay existe de verdade no GHCR.
+  ✅ *Feito:* `.github/workflows/smoke-e2e.yml` + `tests/smoke.sh`: cluster **kind efêmero** a cada PR/push (binário com checksum, nó 1.35 por digest), overlay `ci` com as **mesmas tags do overlay `local`**, 13 verificações (readiness, cadastro, link, `302` com cabeçalhos de privacidade, métricas na 8081, **persistência após destruir o pod do Postgres**, SPA e nginx → tools-api). Passou em 1 min 43 s e virou check **obrigatório**: um PR de bump só entra se a imagem subir num cluster de verdade. Na primeira execução pegou um bug real: os scripts estavam sem bit de execução no Git (editados no Windows).
 - [ ] **C3 · P2 · S — Dependabot/Renovate** para Actions e charts.
 - [ ] **C4 · P2 · M — `terraform fmt/validate` + `tflint`/`tfsec`** no mesmo workflow quando `terraform/**` mudar.
   ⏸ *Adiado:* depende do `terraform/`, que foi adiado com o ambiente Oracle.

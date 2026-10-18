@@ -135,6 +135,15 @@ jobs:
       - run: pip install yamllint==1.37.1
       - run: yamllint -c .yamllint.yaml apps bootstrap platform .github
 
+      # Quem edita no Windows não grava o bit de execução (core.filemode=false), e num Linux o script dá
+      # "Permission denied". Já aconteceu com quase todos os scripts deste repositório.
+      - name: Scripts .sh executáveis no Git
+        run: |
+          bad="$(git ls-files -s -- '*.sh' | awk '$1 != "100755" {print $4}')"
+          if [ -n "$bad" ]; then
+            echo "::error::sem bit de execução (rode: git update-index --chmod=+x <arquivo>): $bad"; exit 1
+          fi
+
   gitleaks:
     name: gitleaks (segredos no Git)
     runs-on: ubuntu-latest

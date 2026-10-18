@@ -20,6 +20,7 @@ crash.log
 .DS_Store
 *.local.yaml
 
-# Chave privada do Sealed Secrets (backup): jamais no Git
-sealed-secrets-key*
+# Chave privada do Sealed Secrets (backup): jamais no Git. Só os arquivos de backup (.yaml), não o
+# script scripts/sealed-secrets-key.sh (um padrão sem extensão o ignorava junto).
+sealed-secrets-key*.yaml
 *-key-backup*.yaml
