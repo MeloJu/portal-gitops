@@ -6,7 +6,8 @@ A mesma aplicação e a mesma plataforma do cluster local, numa VM com K3s criad
 ```
 você ──ssh──► VM (K3s)  ◄── ArgoCD puxa do GitHub (branch develop)
   │             ├─ Traefik :80/:443 ──► l2 (HTTPS Let's Encrypt) ◄── internet
-  │             ├─ Grafana / Tempo / Prometheus   (sem Ingress: só por túnel SSH)
+  │             ├─ Grafana em /grafana/ (login)   ◄── navegador (os traces ficam no Tempo, dentro do Grafana)
+  │             ├─ Tempo / Prometheus / ArgoCD    (sem Ingress: só por túnel SSH)
   │             └─ API do Kubernetes :6443        (fechada no firewall: só por túnel SSH)
 ```
 
@@ -17,7 +18,8 @@ você ──ssh──► VM (K3s)  ◄── ArgoCD puxa do GitHub (branch devel
 | 80 / 443 | internet | Traefik: aplicação e `/otlp/v1/traces` (o navegador envia spans) |
 | 22 | só o seu IP (`ssh_allowed_cidr`) | SSH com chave, sem senha |
 | 6443 (API do Kubernetes) | só você | túnel SSH |
-| Grafana, ArgoCD, Prometheus, Tempo | só você | `port-forward` dentro da VM + túnel SSH |
+| Grafana (`/grafana/`) | quem tiver o login | navegador, por HTTPS (mesmo host e certificado da aplicação). Exposição autorizada pelo dono; o login é obrigatório |
+| ArgoCD, Prometheus, Tempo | só você | `port-forward` dentro da VM + túnel SSH |
 
 ## Subir (uma vez)
 
@@ -77,7 +79,8 @@ plano; **Ctrl+C fecha o acesso**.
 | Quero ver | Comando | Abrir |
 | --- | --- | --- |
 | Applications do ArgoCD, pods, HPA, certificado | `./scripts/azure.sh status` | (no terminal) |
-| Grafana (dashboards, traces no Tempo, alertas) | `./scripts/azure.sh grafana` | http://localhost:3000 |
+| Grafana (dashboards, traces no Tempo, alertas) | **sem comando**, direto no navegador (usuário `admin`; a senha: `./scripts/azure.sh senhas`) | `https://<fqdn>/grafana/` (com a barra final) |
+| Grafana, se o Ingress estiver fechado | `./scripts/azure.sh grafana` | http://localhost:3000 |
 | ArgoCD (UI) | `./scripts/azure.sh argocd` | https://localhost:8444 |
 | Senhas do Grafana e do ArgoCD | `./scripts/azure.sh senhas` | (no terminal) |
 | `kubectl` do seu computador na VM | `./scripts/azure.sh kubectl` | outro terminal: `export KUBECONFIG=...` |
