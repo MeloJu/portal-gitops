@@ -1,0 +1,33 @@
+# Let's Encrypt (HTTP-01): o cert-manager cria um Ingress temporário e o Traefik responde o desafio
+# na porta 80, que o NSG da VM deixa aberta. O DNS é o `fqdn` da Azure (cloudapp.azure.com).
+#
+# Sem `email`: ele é opcional e só serve para avisos de expiração (o cert-manager renova sozinho).
+# `letsencrypt-staging` serve para ensaiar sem gastar o limite de falhas da produção
+# (o certificado dele não é confiável nos navegadores): troque a anotação do Ingress para usá-lo.
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt
+spec:
+  acme:
+    server: https://acme-v02.api.letsencrypt.org/directory
+    privateKeySecretRef:
+      name: letsencrypt-account-key
+    solvers:
+      - http01:
+          ingress:
+            ingressClassName: traefik
+---
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-staging
+spec:
+  acme:
+    server: https://acme-staging-v02.api.letsencrypt.org/directory
+    privateKeySecretRef:
+      name: letsencrypt-staging-account-key
+    solvers:
+      - http01:
+          ingress:
+            ingressClassName: traefik

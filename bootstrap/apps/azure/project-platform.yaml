@@ -1,0 +1,25 @@
+# Projeto da camada de plataforma (controllers, CRDs, observabilidade). Diferente do `l2`, ele
+# precisa de recursos de cluster (CRDs, ClusterRoles) e de vários namespaces.
+# Cada chart Helm novo entra explicitamente em `sourceRepos`: nada de "*".
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: platform
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-2"
+spec:
+  description: Plataforma do cluster (controllers e observabilidade)
+  sourceRepos:
+    - https://github.com/MeloJu/portal-gitops.git
+    - https://bitnami.github.io/sealed-secrets
+    - https://charts.jetstack.io
+    - https://prometheus-community.github.io/helm-charts
+    - https://grafana.github.io/helm-charts
+    - https://open-telemetry.github.io/opentelemetry-helm-charts
+  destinations:
+    - server: https://kubernetes.default.svc
+      namespace: "*"
+  clusterResourceWhitelist:
+    - group: "*"
+      kind: "*"
