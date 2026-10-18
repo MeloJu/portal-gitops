@@ -31,6 +31,14 @@ spec:
           metricsGenerator:
             enabled: true
             remoteWriteUrl: http://kps-prometheus.observability:9090/api/v1/write
+          # Só habilitar o generator não basta: os processadores são ligados por tenant. Sem isto o
+          # painel "Mapa de serviços" fica vazio (traefik -> l2-api -> postgres).
+          overrides:
+            defaults:
+              metrics_generator:
+                processors:
+                  - service-graphs
+                  - span-metrics
           resources:
             requests:
               cpu: 50m
