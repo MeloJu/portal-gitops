@@ -24,6 +24,11 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: l2-api
+  annotations:
+    checkov.io/skip1: "CKV_K8S_40=uid 1001 definido no Dockerfile do backend; mudar exigiria reconstruir a imagem"
+    checkov.io/skip2: "CKV_K8S_43=imagem da aplicacao por tag sha-7 imutavel por commit; digest fica como evolucao (S4)"
+    checkov.io/skip3: "CKV_K8S_15=a tag e unica por commit, entao IfNotPresent e correto e evita pull a cada reinicio"
+    checkov.io/skip4: "CKV_K8S_35=o Spring le DB_PASSWORD e JWT_SECRET do ambiente; o Postgres ja usa arquivo"
   labels:
     app.kubernetes.io/name: l2-api
     app.kubernetes.io/part-of: l2

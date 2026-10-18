@@ -27,6 +27,11 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: tools-api
+  annotations:
+    checkov.io/skip1: "CKV_K8S_40=uid 1001 do pwuser da imagem do Playwright; mudar exigiria reconstruir a imagem"
+    checkov.io/skip2: "CKV_K8S_43=imagem da aplicacao por tag sha-7 imutavel por commit; digest fica como evolucao (S4)"
+    checkov.io/skip3: "CKV_K8S_15=a tag e unica por commit, entao IfNotPresent e correto e evita pull a cada reinicio"
+    checkov.io/skip4: "CKV_K8S_35=as chaves opcionais (VT_API_KEY, BYPASS_*) entram por ambiente, como a app espera"
   labels:
     app.kubernetes.io/name: tools-api
     app.kubernetes.io/part-of: l2
