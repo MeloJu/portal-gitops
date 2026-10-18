@@ -65,9 +65,11 @@ humana pegaram falhas que o código gerado escondia**.
 - **Janela de 60 s no scale-up do HPA**: o boot da JVM (Spring + Flyway) gerava scale-up em cascata.
 - **Limite de viagens alto só no overlay `local`** (`APP_RATELIMIT_TRAVEL_CAPACITY`): o padrão de 60/min
   por IP trava o loop de cliques antes de gerar CPU para o HPA. Login e cadastro ficam no padrão.
-- **Exemplars (métrica → trace) adiados para o `portal-app`**: o `/actuator/prometheus` responde em OpenMetrics, mas sem
-  nenhum exemplar, porque o agente Java do OTel não entrega SpanContext ao Micrometer. Ligar `exemplar-storage` e
-  `exemplars: true` antes disso só criaria um botão que nunca aparece.
+- **Exemplars (métrica → trace) pelo span-metrics do Tempo, não pelo Micrometer**: o `/actuator/prometheus` responde
+  em OpenMetrics, mas sem nenhum exemplar, porque o agente Java do OTel não entrega SpanContext ao Micrometer. Em vez
+  de esperar uma mudança no `portal-app`, o Tempo envia os exemplars das métricas que gera dos spans
+  (`send_exemplars`), o Prometheus os guarda (`exemplar-storage`) e o painel de latência ganhou um p95 "dos traces"
+  com exemplars, ao lado do p95 do Micrometer. O label do exemplar é `traceID` (o que o Tempo grava), não `trace_id`.
 
 ## Próximas entradas
 
