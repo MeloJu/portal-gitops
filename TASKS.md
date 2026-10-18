@@ -8,7 +8,7 @@ adaptando o desafio de referência [`k8s-postgrest-challenge`](https://github.co
 > Repo de destino: `https://github.com/MeloJu/portal-gitops`. A árvore abaixo usa o layout "l2-gitops" combinado.
 > **Copiloto de IA:** o enunciado do desafio cita o Kiro, mas a organização liberou o **Claude** no lugar. O uso é registrado em `docs/uso-do-claude.md` (critério "Uso do copiloto", 10% da nota).
 > **Escopo atual:** só o cluster **local**. O ambiente Oracle (e o que depende dele: Let's Encrypt, SealedSecret de produção, Terraform) foi adiado.
-> **Progresso:** 48 de 62 tasks feitas · faltam 9 no escopo atual (P0: 0 · P1: 3 · P2: 6) · 5 adiadas (Oracle/Terraform). Atualizado a cada PR que fecha task.
+> **Progresso:** 49 de 62 tasks feitas · faltam 8 no escopo atual (P0: 0 · P1: 3 · P2: 5) · 5 adiadas (Oracle/Terraform). Atualizado a cada PR que fecha task.
 > **Status:** M1 e a plataforma local (P1–P6) feitos e mergeados na `develop`; G1–G4 feitos. Próximo: observabilidade (O1–O7). Legenda das notas: ✅ feito · ◐ parcial · ⏸ adiado.
 > Legenda: **P0** = sem isso não há demo · **P1** = nota alta · **P2** = diferencial. Tamanho: **S** (<1h) · **M** (1–3h) · **L** (>3h).
 
@@ -355,7 +355,8 @@ Helm via ArgoCD em `platform/observability/`.
   ✅ *Feito:* ServiceAccount própria para cada workload (`l2-api`, `frontend`, `tools-api`, `postgres`), com `automountServiceAccountToken: false` na SA e no pod. Verificado: cada pod roda com a sua, sem token.
 - [ ] **S4 · P2 · M — Digest nas imagens de terceiros** (nginx, postgres etc.), como o `hardening-producao.md` da referência.
   ◐ *Parcial:* Postgres fixado por digest; charts da plataforma por versão. As bases nginx/Playwright são do `portal-app` (Dockerfiles de lá).
-- [ ] **S5 · P2 · M — Backup do Postgres** (`CronJob` com `pg_dump` para volume/bucket) — substitui o que o CNPG daria.
+- [x] **S5 · P2 · M — Backup do Postgres** (`CronJob` com `pg_dump` para volume/bucket) — substitui o que o CNPG daria.
+  ✅ *Feito:* `CronJob` diário de `pg_dump` como `l2_app`, validado com `pg_restore --list`, retenção de 7, NetworkPolicy própria. **Ensaio de restauração** num banco novo: as 5 tabelas idênticas ao original (18.453 viagens). O smoke e2e roda um backup a cada PR. Ver [`docs/backup.md`](docs/backup.md).
 - [ ] **S6 · P1 · S — `docs/hardening.md`** no molde da referência (o quê, por quê, como verificar).
 
 ### Épico X — Mudanças necessárias no `portal-app` (outro repo)
