@@ -74,5 +74,5 @@ spec:
           labels:
             severity: info
           annotations:
-            summary: A Lumi bloqueou {{ $value | humanize }} ameaças nos últimos 5 minutos.
+            summary: A Lumi bloqueou {{ $value | printf "%.0f" }} ameaças nos últimos 5 minutos.
             description: Rajada de login/cadastro/viagens acima do limite. Ver o painel "Ameaças bloqueadas por motivo".

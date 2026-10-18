@@ -8,7 +8,7 @@ adaptando o desafio de referência [`k8s-postgrest-challenge`](https://github.co
 > Repo de destino: `https://github.com/MeloJu/portal-gitops`. A árvore abaixo usa o layout "l2-gitops" combinado.
 > **Copiloto de IA:** o enunciado do desafio cita o Kiro, mas a organização liberou o **Claude** no lugar. O uso é registrado em `docs/uso-do-claude.md` (critério "Uso do copiloto", 10% da nota).
 > **Escopo atual:** só o cluster **local**. O ambiente Oracle (e o que depende dele: Let's Encrypt, SealedSecret de produção, Terraform) foi adiado.
-> **Progresso:** 46 de 62 tasks feitas · faltam 11 no escopo atual (P0: 0 · P1: 3 · P2: 8) · 5 adiadas (Oracle/Terraform). Atualizado a cada PR que fecha task.
+> **Progresso:** 48 de 62 tasks feitas · faltam 9 no escopo atual (P0: 0 · P1: 3 · P2: 6) · 5 adiadas (Oracle/Terraform). Atualizado a cada PR que fecha task.
 > **Status:** M1 e a plataforma local (P1–P6) feitos e mergeados na `develop`; G1–G4 feitos. Próximo: observabilidade (O1–O7). Legenda das notas: ✅ feito · ◐ parcial · ⏸ adiado.
 > Legenda: **P0** = sem isso não há demo · **P1** = nota alta · **P2** = diferencial. Tamanho: **S** (<1h) · **M** (1–3h) · **L** (>3h).
 
@@ -340,8 +340,10 @@ Helm via ArgoCD em `platform/observability/`.
   ✅ *Feito:* dashboard "Lumi — Visão geral" (13 painéis), todos com dado sob carga, incluindo o mapa de serviços user → traefik → l2-api → postgres.
 - [x] **O8 · P1 · L — Span do frontend:** OTel JS no browser (X4) enviando para `/otlp`; conferir no Tempo um trace **browser → l2-api → JDBC (banco)**.
   ✅ *Feito:* o trace começa no **navegador**: num Chromium headless real contra o cluster, 6 de 6 chamadas à API saem com `traceparent`, e o Tempo mostra um único trace `l2-frontend` → `traefik` → `l2-api` → `SELECT l2.links`. Reproduzível com `./scripts/check-browser-trace.sh`.
-- [ ] **O9 · P2 · M — `postgres_exporter`** (sidecar) para métricas do banco (o CNPG daria isso de graça; aqui é manual).
-- [ ] **O10 · P2 · M — Alertas** (erro 5xx, p95, crashloop) e/ou Loki com logs correlacionados por `trace_id`.
+- [x] **O9 · P2 · M — `postgres_exporter`** (sidecar) para métricas do banco (o CNPG daria isso de graça; aqui é manual).
+  ✅ *Feito:* sidecar `postgres-exporter` v0.20.1 (por digest) no pod do Postgres, conectado como **`l2_app`** (privilégio mínimo, senha de arquivo), `PodMonitor` e liberação na NetworkPolicy. Linha "Banco" no dashboard: no ar, conexões, commits/s e tamanho. Verificado: `pg_up=1`, 7 conexões, ~2,5 commits/s com tráfego, 13 MB.
+- [x] **O10 · P2 · M — Alertas** (erro 5xx, p95, crashloop) e/ou Loki com logs correlacionados por `trace_id`.
+  ✅ *Feito:* `apps/l2/base/alerts.yaml` (PrometheusRule): API fora, banco fora, pod reiniciando, 5xx > 5%, p95 > 1 s e pico de ameaças. **Testadas com `promtool test rules`** (6 casos, dispara e não dispara), no CI a cada PR; a sabotagem de um limite faz o teste falhar. No cluster: regras `health: ok` e a cena `ameaca` da demo fez o `L2PicoDeAmeacas` **disparar** de verdade. Sem Alertmanager: os alertas aparecem no Prometheus e no Grafana.
 
 ### Épico S — Hardening (parte de engenharia cloud-native, 35%)
 
