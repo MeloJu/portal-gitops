@@ -94,7 +94,7 @@ jobs:
         run: |
           for f in rendered/*.yaml rendered-platform/*.yaml; do
             dir="$(dirname "$f")"
-            docker run --rm -v "$PWD/${dir}:/in:ro" ghcr.io/yannh/kubeconform:v0.8.0 \
+            docker run --rm -v "$PWD/${dir}:/in:ro" ghcr.io/yannh/kubeconform:v0.8.0@sha256:faffaf43f95aa6425306e1ab8d6fcad72acb9049158f38e574c085ea1ec0f64e \
               -summary -strict -kubernetes-version 1.35.0 \
               -schema-location default -schema-location "$CRDS_CATALOG" \
               "/in/$(basename "$f")"
@@ -121,7 +121,7 @@ jobs:
       # Sem exceções na linha de comando: tudo que falhar barra o PR.
       - name: Checkov
         run: |
-          docker run --rm -v "$PWD/rendered:/rl:ro" bridgecrew/checkov:3.2.500 \
+          docker run --rm -v "$PWD/rendered:/rl:ro" bridgecrew/checkov:3.2.500@sha256:5a4407716a99cb170af27f1df9467f23d6f335fe824384b9ad053f58388d81a4 \
             -d /rl --framework kubernetes --compact --quiet
 
   terraform:
@@ -140,6 +140,12 @@ jobs:
         run: |
           docker run --rm -v "$PWD/terraform:/tf" -w /tf hashicorp/terraform:1.15.9@sha256:fd5debae63188975d6febc6aa5bd1a982a588f55e4a4ddb7de28be923f250456 init -backend=false -input=false
           docker run --rm -v "$PWD/terraform:/tf" -w /tf hashicorp/terraform:1.15.9@sha256:fd5debae63188975d6febc6aa5bd1a982a588f55e4a4ddb7de28be923f250456 validate
+
+      # A validação de `ssh_allowed_cidr` é a ÚNICA barreira contra o SSH aberto ao mundo (o scanner não avalia
+      # valores vindos de variável). Estes testes provam que ela recusa 0.0.0.0/0, 0.0.0.0/1, /0, /8, IPv6 etc.
+      # e aceita /24 a /32; sem eles, um PR futuro poderia afrouxá-la sem ninguém notar.
+      - name: terraform test (validação do CIDR do SSH)
+        run: docker run --rm -v "$PWD/terraform:/tf" -w /tf hashicorp/terraform:1.15.9@sha256:fd5debae63188975d6febc6aa5bd1a982a588f55e4a4ddb7de28be923f250456 test
 
       # Falha em qualquer achado. Os que são intencionais (80/443 abertos, IP público na NIC) estão
       # justificados em `#trivy:ignore:<id>` no próprio main.tf, com o motivo.
