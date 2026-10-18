@@ -133,19 +133,19 @@ jobs:
 
       # Imagens oficiais fixadas: sem action de terceiro e com a mesma versão em todo PR.
       - name: terraform fmt
-        run: docker run --rm -v "$PWD/terraform:/tf" -w /tf hashicorp/terraform:1.15.9 fmt -check -recursive -diff
+        run: docker run --rm -v "$PWD/terraform:/tf" -w /tf hashicorp/terraform:1.15.9@sha256:fd5debae63188975d6febc6aa5bd1a982a588f55e4a4ddb7de28be923f250456 fmt -check -recursive -diff
 
       # Não autentica na Azure: só baixa os providers e confere o schema, o grafo e as validações de variável.
       - name: terraform validate
         run: |
-          docker run --rm -v "$PWD/terraform:/tf" -w /tf hashicorp/terraform:1.15.9 init -backend=false -input=false
-          docker run --rm -v "$PWD/terraform:/tf" -w /tf hashicorp/terraform:1.15.9 validate
+          docker run --rm -v "$PWD/terraform:/tf" -w /tf hashicorp/terraform:1.15.9@sha256:fd5debae63188975d6febc6aa5bd1a982a588f55e4a4ddb7de28be923f250456 init -backend=false -input=false
+          docker run --rm -v "$PWD/terraform:/tf" -w /tf hashicorp/terraform:1.15.9@sha256:fd5debae63188975d6febc6aa5bd1a982a588f55e4a4ddb7de28be923f250456 validate
 
       # Falha em qualquer achado. Os que são intencionais (80/443 abertos, IP público na NIC) estão
       # justificados em `#trivy:ignore:<id>` no próprio main.tf, com o motivo.
       - name: Trivy (IaC)
         run: |
-          docker run --rm -v "$PWD/terraform:/tf:ro" aquasec/trivy:0.69.1 config \
+          docker run --rm -v "$PWD/terraform:/tf:ro" aquasec/trivy:0.69.1@sha256:1c78ed1ef824ab8bb05b04359d186e4c1229d0b3e67005faacb54a7d71974f73 config \
             --severity LOW,MEDIUM,HIGH,CRITICAL --exit-code 1 /tf
 
   promtool:
