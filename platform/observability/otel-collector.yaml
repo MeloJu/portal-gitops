@@ -1,0 +1,73 @@
+# OpenTelemetry Collector: porta de entrada única dos traces (API, Traefik e, depois, o
+# browser via /otlp). Tira o ruído e repassa para o Tempo.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: otel-collector
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: platform
+  source:
+    repoURL: https://open-telemetry.github.io/opentelemetry-helm-charts
+    chart: opentelemetry-collector
+    targetRevision: 0.176.0
+    helm:
+      releaseName: otel-collector
+      valuesObject:
+        # Nome fixo: a API aponta para http://otel-collector.observability:4318.
+        fullnameOverride: otel-collector
+        mode: deployment
+        image:
+          repository: otel/opentelemetry-collector-contrib
+        resources:
+          requests:
+            cpu: 50m
+            memory: 128Mi
+          limits:
+            memory: 256Mi
+        config:
+          receivers:
+            otlp:
+              protocols:
+                grpc:
+                  endpoint: 0.0.0.0:4317
+                http:
+                  endpoint: 0.0.0.0:4318
+          processors:
+            # Primeiro sempre: sob carga, recusa dados antes de o pod tomar OOMKill.
+            memory_limiter:
+              check_interval: 1s
+              limit_percentage: 80
+              spike_limit_percentage: 25
+            # As probes batem no Actuator a cada 5-10 s; esses spans só poluem o Tempo.
+            filter/probes:
+              error_mode: ignore
+              traces:
+                span:
+                  - IsMatch(attributes["url.path"], "^/actuator")
+                  - IsMatch(attributes["http.route"], "^/actuator")
+            batch: {}
+          exporters:
+            otlp/tempo:
+              endpoint: tempo.observability:4317
+              tls:
+                insecure: true
+          service:
+            pipelines:
+              traces:
+                receivers: [otlp]
+                processors: [memory_limiter, filter/probes, batch]
+                exporters: [otlp/tempo]
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: observability
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

@@ -58,6 +58,16 @@ else
     --from-literal=JWT_SECRET="$(head -c 32 /dev/urandom | base64 | tr -d '\n')"
 fi
 
+echo "==> Senha do Grafana (fora do Git)"
+kubectl create namespace observability --dry-run=client -o yaml | kubectl apply -f - >/dev/null
+if kubectl -n observability get secret grafana-admin >/dev/null 2>&1; then
+  echo "    grafana-admin já existe, mantendo"
+else
+  kubectl -n observability create secret generic grafana-admin \
+    --from-literal=admin-user=admin \
+    --from-literal=admin-password="$(head -c 18 /dev/urandom | base64 | tr -d '=+/\n')"
+fi
+
 echo "==> App-of-apps"
 kubectl apply -f "${REPO_ROOT}/bootstrap/root-local.yaml"
 
@@ -69,6 +79,8 @@ Pronto. O ArgoCD vai sincronizar a branch 'develop' sozinho.
   UI do Argo:   kubectl -n argocd port-forward svc/argocd-server 8443:443
                 senha: kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d
   A aplicação:  http://l2.localhost
+  Grafana:      http://grafana.localhost  (usuário admin)
+                senha: kubectl -n observability get secret grafana-admin -o jsonpath='{.data.admin-password}' | base64 -d
 
 As imagens ainda são o placeholder 'sha-pending' até o pipeline do portal-app publicar.
 Para testar já: ./scripts/load-local-images.sh <caminho-do-portal-app>

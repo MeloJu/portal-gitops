@@ -9,6 +9,7 @@ resources:
   - postgres.yaml
   - api.yaml
   - api-hpa.yaml
+  - api-servicemonitor.yaml
   - tools-api.yaml
   - frontend.yaml
   - ingress.yaml

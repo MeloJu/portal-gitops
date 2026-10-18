@@ -38,6 +38,10 @@ patches:
       - op: add
         path: /data/APP_RATELIMIT_TRAVEL_CAPACITY
         value: "6000"
+      # Separa os traces por ambiente no Tempo/Grafana.
+      - op: add
+        path: /data/OTEL_RESOURCE_ATTRIBUTES
+        value: deployment.environment=local
   - target:
       kind: Ingress
       name: l2

@@ -68,9 +68,11 @@ jobs:
       # no cluster. Aqui só renderiza (os CRDs do Argo/K3s não têm schema no kubeconform).
       - name: kustomize build do app-of-apps e da plataforma
         run: |
+          mkdir -p rendered-platform
           for dir in bootstrap/apps/*/ platform/*/ platform/*/*/; do
             [ -f "${dir}kustomization.yaml" ] || continue
-            kubectl kustomize "$dir" > /dev/null && echo "ok  ${dir}"
+            name="$(echo "${dir%/}" | tr '/' '_')"
+            kubectl kustomize "$dir" > "rendered-platform/${name}.yaml" && echo "ok  ${dir}"
           done
 
       # Sem tag latest nem imagem sem tag/digest renderizada: o bump automático existe para isso.
@@ -83,11 +85,18 @@ jobs:
             echo "::error::imagem com tag latest"; exit 1
           fi
 
-      - name: kubeconform (-strict)
+      # CRDs (ServiceMonitor, Application do Argo, ClusterIssuer, HelmChartConfig...) validados
+      # pelo catálogo público de schemas; o que não estiver lá falha, não é pulado em silêncio.
+      - name: kubeconform (-strict, com schemas de CRDs)
+        env:
+          CRDS_CATALOG: https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json
         run: |
-          for f in rendered/*.yaml; do
-            docker run --rm -v "$PWD/rendered:/in:ro" ghcr.io/yannh/kubeconform:v0.8.0 \
-              -summary -strict -kubernetes-version 1.35.0 "/in/$(basename "$f")"
+          for f in rendered/*.yaml rendered-platform/*.yaml; do
+            dir="$(dirname "$f")"
+            docker run --rm -v "$PWD/${dir}:/in:ro" ghcr.io/yannh/kubeconform:v0.8.0 \
+              -summary -strict -kubernetes-version 1.35.0 \
+              -schema-location default -schema-location "$CRDS_CATALOG" \
+              "/in/$(basename "$f")"
           done
 
   yamllint:

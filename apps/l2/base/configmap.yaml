@@ -18,10 +18,16 @@ data:
   SESSION_COOKIE_SECURE: "true"
   # Spring só liga os grupos liveness/readiness sozinho ao detectar Kubernetes; explícito evita surpresa.
   MANAGEMENT_ENDPOINT_HEALTH_PROBES_ENABLED: "true"
-  # O agente OTel já vem na imagem, desligado. Fica desligado até o Collector existir (marco M3).
-  OTEL_SDK_DISABLED: "true"
+  # Agente OpenTelemetry (já vem na imagem, desligado por padrão): traces da API e do JDBC
+  # (as queries no Postgres viram spans filhos) para o Collector, que repassa ao Tempo.
+  OTEL_SDK_DISABLED: "false"
   OTEL_SERVICE_NAME: l2-api
   OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector.observability:4318
   OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
+  # Continua o trace de quem chamou (Traefik, browser); sem pai, amostra tudo. Demo: 100%.
+  OTEL_TRACES_SAMPLER: parentbased_always_on
+  # Métricas vão pelo scrape do Prometheus (/actuator/prometheus); logs ficam no stdout.
   OTEL_METRICS_EXPORTER: none
   OTEL_LOGS_EXPORTER: none
+  # Sem histograma o Prometheus só tem média de latência; com ele, p50/p95/p99 por rota.
+  MANAGEMENT_METRICS_DISTRIBUTION_PERCENTILES_HISTOGRAM_HTTP_SERVER_REQUESTS: "true"

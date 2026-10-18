@@ -8,4 +8,5 @@ resources:
   - ../../../platform/sealed-secrets
   - ../../../platform/cert-manager
   - ../../../platform/traefik
+  - ../../../platform/observability
   - l2.yaml
