@@ -8,7 +8,7 @@ adaptando o desafio de referência [`k8s-postgrest-challenge`](https://github.co
 > Repo de destino: `https://github.com/MeloJu/portal-gitops`. A árvore abaixo usa o layout "l2-gitops" combinado.
 > **Copiloto de IA:** o enunciado do desafio cita o Kiro, mas a organização liberou o **Claude** no lugar. O uso é registrado em `docs/uso-do-claude.md` (critério "Uso do copiloto", 10% da nota).
 > **Escopo atual:** cluster **local** pronto e validado; ambiente **Azure** (assinatura estudantil) em construção, ver §12. O Oracle foi descartado.
-> **Progresso:** 54 de 62 tasks feitas · faltam 8 (P0: 0 · P1: 5 · P2: 3) · 0 adiadas. O ambiente Azure (§12) tem 5 passos próprios. Atualizado a cada PR que fecha task.
+> **Progresso:** 54 de 63 tasks feitas · faltam 9 (P0: 0 · P1: 6 · P2: 3) · 0 adiadas. O ambiente Azure (§12) tem 5 passos próprios. Atualizado a cada PR que fecha task.
 > **Status:** M1 e a plataforma local (P1–P6) feitos e mergeados na `develop`; G1–G4 feitos. Próximo: observabilidade (O1–O7). Legenda das notas: ✅ feito · ◐ parcial · ⏸ adiado.
 > Legenda: **P0** = sem isso não há demo · **P1** = nota alta · **P2** = diferencial. Tamanho: **S** (<1h) · **M** (1–3h) · **L** (>3h).
 
@@ -291,6 +291,10 @@ Actions pinadas **por SHA com comentário de versão**, `permissions: contents: 
   ✅ *Feito:* `.github/dependabot.yml`: GitHub Actions (fixadas por SHA), um PR agrupado por semana na `develop`. O check Gitflow passou a aceitar branches `dependabot/*` (sem isso todo PR do Dependabot seria recusado). Charts Helm do ArgoCD ficam à mão (o Dependabot não os suporta).
 - [x] **C4 · P2 · M — `terraform fmt/validate` + `tflint`/`tfsec`** no mesmo workflow quando `terraform/**` mudar.
   ✅ *Feito:* job `Terraform (fmt, validate, scan)` no CI: `fmt -check`, `init -backend=false` + `validate` e **Trivy IaC com exit 1** em qualquer achado. Provado: limpo hoje; com o SSH aberto ao mundo ele **falha**. Os 3 achados intencionais estão justificados no `main.tf` (`#trivy:ignore`). Achou também uma janela real: a VM podia nascer antes do firewall (corrigido com `depends_on`).
+- [ ] **C5 · P1 · S — Tornar o check `Terraform (fmt, validate, scan)` obrigatório** na `develop` e na `main` (branch protection ou ruleset), como já são os checks do C1/C2 (proteção do G2). O job do C4 roda em todo PR, mas enquanto o check não for exigido um PR com Terraform quebrado pode ser mergeado.
+  *Pré-requisito:* PR #30 (`feature/terraform-azure`) e o de correção #31 mergeados na `develop`, e o job ter rodado ao menos uma vez na `develop`/`main` (sem isso o check não aparece na lista de obrigatórios).
+  *Atenção:* check obrigatório que nunca roda deixa o PR pendente para sempre ("Waiting for status"). Hoje o `pr-validate.yml` não tem filtro `paths:` e o job roda sempre; se alguém adicionar `paths: terraform/**` (no workflow ou no job), o job precisa continuar rodando e **sair cedo** quando `terraform/**` não mudou, ou o workflow tem que ser ajustado **antes** de exigir o check.
+  *Pronto quando:* o check aparece como obrigatório na `develop` e na `main` (conferir com `gh api repos/MeloJu/portal-gitops/branches/<branch>/protection` ou nos rulesets) e um PR sem mudança em `terraform/` é mergeado normalmente. Ao concluir, atualizar a contagem de checks obrigatórios do §11 (hoje "8 checks obrigatórios").
 
 ### Épico D — CD / integração com o `portal-app`
 
@@ -438,7 +442,7 @@ Helm via ArgoCD em `platform/observability/`.
 - [ ] README: ideia, como rodar, como o Claude foi usado (`docs/uso-do-claude.md`)
 - [ ] Pitch de 15 min ensaiado com `demo-load.sh`
 
-## 11. Para delegar — o que falta (6 tasks)
+## 11. Para delegar — o que falta (7 tasks)
 
 Cada item diz o que entregar, como provar que está pronto e o que já existe para reaproveitar. Antes de começar:
 `CLAUDE.md` (regras do projeto), `docs/ci-cd.md` (como um PR chega ao cluster) e `./scripts/bootstrap-local.sh`
@@ -449,6 +453,7 @@ Cada item diz o que entregar, como provar que está pronto e o que já existe pa
 | **Q6** Roteiro do pitch | P1 | M | `docs/pitch.md`: 3 min portal/personagem · 8 min demo ao vivo · 2 min pipeline e Claude · 2 min perguntas, com o que falar e o comando de cada cena | alguém que não construiu consegue ensaiar o pitch só com o documento, e ele cabe em 15 min cronometrado | `scripts/demo-load.sh` (cenas `cliques` e `ameaca`), `scripts/check-browser-trace.sh`, dashboard "Lumi — Visão geral", `docs/ci-cd.md` |
 | **Q4** Evidências | P1 | S | `docs/evidencias/` com prints: ArgoCD `Synced`, pipeline verde (CI + PR de bump), Grafana com o HPA escalando, trace `l2-frontend → traefik → l2-api → Postgres` no Tempo, alerta disparado | cada print tem legenda do que prova; referenciados no README | dados reais: rode `demo-load.sh cliques` e `ameaca` antes de capturar |
 | **S6** `hardening.md` | P1 | S | `docs/hardening.md` no molde do `hardening-producao.md` do desafio de referência: o quê, por quê, como verificar | cada controle tem um comando de verificação que funciona | já feito e testado: PSA `restricted`, NetworkPolicies, SA sem token, Checkov, segredos (SealedSecret/gitleaks), rate limit em 2 camadas, `/otlp` em 4 camadas, digest, backup |
+| **C5** Check Terraform obrigatório | P1 | S | `Terraform (fmt, validate, scan)` nos status checks obrigatórios da `develop` e da `main` (G2/C1/C2). Antes: PRs #30 e #31 mergeados e o job ter rodado uma vez na `develop`/`main`; se o workflow ganhar `paths: terraform/**`, o job tem que rodar sempre e sair cedo, senão PR sem Terraform fica pendente para sempre | `gh api repos/MeloJu/portal-gitops/branches/<branch>/protection` (ou rulesets) lista o check nas duas branches e um PR sem mudança em `terraform/` é mergeado normalmente; atualizar os "8 checks obrigatórios" acima | job do C4 em `.github/workflows/pr-validate.yml` (hoje sem filtro `paths:`) |
 | **X5** Seed de demo | P2 | S | decidir: o `demo-load.sh setup` já cria usuário e links; se bastar, só marcar a task e documentar | a demo começa com dados sem cadastro manual | `scripts/demo-load.sh setup` |
 | **A12** GeoIP | P2 | M | `CronJob` `geoipupdate` gravando a `GeoLite2-Country.mmdb` num PVC + `GEOIP_DB_PATH` no `l2-config.env` | viagens passam a ter país (painel de países) | **precisa de uma conta MaxMind (Account ID + License Key)**, que vai num SealedSecret. A base nunca entra no Git. Sem isso nada quebra: só ficam sem país |
 | **D5** Gate de promoção | P2 | M | PR `release/*` → `main` verificando que as 3 tags do overlay existem no GHCR; rollback = `git revert` do bump | depende de ter um overlay de produção | **adiada de fato**: sem ambiente `oracle` não há o que promover |
