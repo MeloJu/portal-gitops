@@ -1,0 +1,22 @@
+# App-of-apps do cluster Azure: a única Application criada à mão (por scripts/bootstrap-azure.sh).
+# Ela sincroniza bootstrap/apps/azure: os AppProjects, a plataforma e a aplicação.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: root
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/MeloJu/portal-gitops.git
+    targetRevision: develop
+    path: bootstrap/apps/azure
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true

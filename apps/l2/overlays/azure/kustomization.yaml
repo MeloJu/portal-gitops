@@ -1,0 +1,61 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+# VM Azure com K3s (terraform/). Host = o `fqdn` que o Terraform imprime (DNS grátis da Azure),
+# o que permite HTTPS de verdade (Let's Encrypt) sem comprar domínio.
+namespace: l2
+resources:
+  - ../../base
+# O Secret `l2-secrets` entra como SealedSecret (task AZ4): só o controller deste cluster o abre.
+# Gerado com scripts/seal-secret.sh (docs/azure.md e docs/sealed-secrets.md).
+
+# As imagens do Azure NÃO seguem o bump automático (que edita o overlay `local`): a promoção é
+# deliberada, copiando este bloco a partir do `local` depois que a versão provou-se lá (task D5).
+images:
+  - name: ghcr.io/meloju/portal-app-backend
+    newTag: sha-f6a2ea0
+    digest: sha256:b58b5496ac5edd3690b53c8b8910183125c21101383ccc7a81e343cf2c04d966
+  - name: ghcr.io/meloju/portal-app-frontend
+    newTag: sha-f6a2ea0
+    digest: sha256:1f772fb9812cd0488b559de46add082c40bd51cd932f94914921425f078812c4
+  - name: ghcr.io/meloju/portal-app-tools-api
+    newTag: sha-f6a2ea0
+    digest: sha256:f62eb974a6897d82c54d791144ba1c032cbe11bbea66750b04b629caedc0a82f
+configMapGenerator:
+  - name: l2-config
+    behavior: merge
+    literals:
+      - PUBLIC_BASE_URL=https://l2-mk6a4.brazilsouth.cloudapp.azure.com
+      # HTTPS de verdade: o cookie de sessão só trafega por TLS.
+      - SESSION_COOKIE_SECURE=true
+      # Separa os traces por ambiente no Tempo/Grafana.
+      - OTEL_RESOURCE_ATTRIBUTES=deployment.environment=azure
+patches:
+  - target:
+      kind: Ingress
+      name: l2
+    patch: |-
+      - op: add
+        path: /spec/rules/0/host
+        value: l2-mk6a4.brazilsouth.cloudapp.azure.com
+      # Adiciona SÓ esta chave: `add /metadata/annotations` com um mapa substituiria as anotações da base
+      # (e o middleware de rate limit sumiria). No JSON Pointer, a "/" do nome da chave vira "~1".
+      - op: add
+        path: /metadata/annotations/cert-manager.io~1cluster-issuer
+        value: letsencrypt
+      - op: add
+        path: /spec/tls
+        value:
+          - hosts:
+              - l2-mk6a4.brazilsouth.cloudapp.azure.com
+            secretName: l2-tls
+  # Uma VM só (2 vCPU): até 3 réplicas da API cabem, e o HPA continua sendo a cena da demo.
+  - target:
+      kind: HorizontalPodAutoscaler
+      name: l2-api
+    patch: |-
+      - op: replace
+        path: /spec/minReplicas
+        value: 1
+      - op: replace
+        path: /spec/maxReplicas
+        value: 3

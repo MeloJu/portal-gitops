@@ -8,7 +8,7 @@ adaptando o desafio de referência [`k8s-postgrest-challenge`](https://github.co
 > Repo de destino: `https://github.com/MeloJu/portal-gitops`. A árvore abaixo usa o layout "l2-gitops" combinado.
 > **Copiloto de IA:** o enunciado do desafio cita o Kiro, mas a organização liberou o **Claude** no lugar. O uso é registrado em `docs/uso-do-claude.md` (critério "Uso do copiloto", 10% da nota).
 > **Escopo atual:** cluster **local** pronto e validado; ambiente **Azure** (assinatura estudantil) em construção, ver §12. O Oracle foi descartado.
-> **Progresso:** 55 de 63 tasks feitas · faltam 8 (P0: 0 · P1: 5 · P2: 3) · 0 adiadas. O ambiente Azure (§12) tem 5 passos próprios. Atualizado a cada PR que fecha task.
+> **Progresso:** 57 de 63 tasks feitas · faltam 6 (P0: 0 · P1: 3 · P2: 3) · 0 adiadas. O ambiente Azure (§12) tem 5 passos próprios. Atualizado a cada PR que fecha task.
 > **Status:** M1 e a plataforma local (P1–P6) feitos e mergeados na `develop`; G1–G4 feitos. Próximo: observabilidade (O1–O7). Legenda das notas: ✅ feito · ◐ parcial · ⏸ adiado.
 > Legenda: **P0** = sem isso não há demo · **P1** = nota alta · **P2** = diferencial. Tamanho: **S** (<1h) · **M** (1–3h) · **L** (>3h).
 
@@ -311,10 +311,10 @@ Actions pinadas **por SHA com comentário de versão**, `permissions: contents: 
 
 ### Épico T — Terraform / Oracle Cloud (`terraform/`)
 
-- [ ] **T1 · P1 · M — Rede e VM:** VCN, subnet, security list (22 restrito, 80, 443; **não** expor 6443/8081), instância **Ampere A1.Flex** (Free Tier), chave SSH.
-  ◐ *Parcial:* Ambiente **Azure** (substitui o Oracle, que foi descartado): ver [`terraform/README.md`](terraform/README.md). VNet, IP público estático com DNS grátis, NSG na **sub-rede** (só 80/443; 22 só do seu IP; 6443/Actuator/Grafana fechados) e VM `Standard_B2ms`. `fmt`, `validate`, validações de variável e Trivy limpos. **Falta o `apply` numa conta real** (precisa das suas credenciais e da checagem de região/tamanho). **Atualização (out/2026):** `terraform plan` rodado contra a assinatura real, autenticado: **10 a criar, 0 a alterar, 0 a destruir**. A `B2ms` **não existe em `brazilsouth`**; o padrão passou a `Standard_D2s_v4` (única de 2 vCPU/8 GB com quota nesta assinatura). Provedores de recurso registrados. **Falta só o `apply`.**
-- [ ] **T2 · P1 · M — K3s via cloud-init** (Traefik habilitado) e saída do `kubeconfig`; opcionalmente já instala o ArgoCD e aplica o `bootstrap/`.
-  ◐ *Parcial:* K3s `v1.35.5+k3s1` (a mesma do k3d) instalado por cloud-init, aprovado pelo `cloud-init schema` oficial; kubeconfig por túnel SSH (a 6443 não é exposta). **Falta provar numa VM de verdade.** O ArgoCD e o app-of-apps na VM dependem do overlay `azure` e do `bootstrap-azure.sh` (abaixo).
+- [x] **T1 · P1 · M — Rede e VM:** VCN, subnet, security list (22 restrito, 80, 443; **não** expor 6443/8081), instância **Ampere A1.Flex** (Free Tier), chave SSH.
+  ✅ *Feito (Azure no lugar do Oracle):* ver [`terraform/README.md`](terraform/README.md). VNet, IP público estático com DNS grátis, NSG na **sub-rede** (só 80/443; 22 só do seu IP; 6443/Actuator/Grafana fechados) e VM `Standard_D2s_v4` (a `B2ms` não existe em `brazilsouth`; esta é a de 2 vCPU/8 GB com quota na assinatura). `fmt`, `validate`, validações de variável e Trivy limpos. **`terraform apply` real (out/2026): 10 criados, 0 alterados, 0 destruídos**, VM acessível por SSH com chave.
+- [x] **T2 · P1 · M — K3s via cloud-init** (Traefik habilitado) e saída do `kubeconfig`; opcionalmente já instala o ArgoCD e aplica o `bootstrap/`.
+  ✅ *Feito:* K3s `v1.35.5+k3s1` (a mesma do k3d) instalado por cloud-init; **provado na VM real**: `cloud-init status` = `done` e o nó `l2-vm` ficou `Ready`. Kubeconfig por túnel SSH (a 6443 não é exposta). O ArgoCD e o app-of-apps na VM são o `scripts/bootstrap-azure.sh` (AZ3).
 - [x] **T3 · P1 · S — Estado e segredos:** backend remoto (bucket OCI) ou local **fora do Git**; variáveis sensíveis em `*.tfvars` ignorado; `terraform.tfvars.example` versionado.
   ✅ *Feito:* estado local fora do Git (`*.tfstate`, `*.tfvars`, `.terraform/` no `.gitignore`) e `terraform.tfvars.example` versionado; lockfile dos providers no Git. Backend remoto fica fora: o estado de uma VM de estudante não justifica um bucket.
 - [x] **T4 · P2 · S — `terraform destroy` documentado** (custo/limpeza) e `docs/` com o passo a passo do `apply` até o ArgoCD sincronizando.
@@ -467,8 +467,8 @@ O plano estudantil da Azure virou o ambiente "nuvem". Em vez do Oracle, a VM fic
 
 | # | Task | Estado | Observação |
 | --- | --- | --- | --- |
-| AZ1 | Terraform da VM (T1–T4, C4) | ◐ `plan` real OK (10 a criar), **não aplicado** | falta o `apply` (gasta crédito: precisa de OK explícito); ver `terraform/README.md` |
-| AZ2 | Overlay `azure` do ArgoCD + `ClusterIssuer` Let's Encrypt | ⏳ | host = o `fqdn` do Terraform; `SESSION_COOKIE_SECURE=true` |
-| AZ3 | `scripts/bootstrap-azure.sh` (ArgoCD + app-of-apps na VM) | ⏳ | parecido com o `bootstrap-local.sh`, via SSH |
+| AZ1 | Terraform da VM (T1–T4, C4) | ✅ `apply` real: 10 criados, nó K3s `Ready` | `terraform/README.md` |
+| AZ2 | Overlay `azure` do ArgoCD + `ClusterIssuer` Let's Encrypt | ◐ escrito e renderiza; **falta provar no cluster** | `apps/l2/overlays/azure`, `bootstrap/apps/azure`, `platform/*-azure`; host = o `fqdn`; `SESSION_COOKIE_SECURE=true`; Grafana sem Ingress (túnel) |
+| AZ3 | `scripts/bootstrap-azure.sh` (ArgoCD + app-of-apps na VM) | ◐ escrito; **falta rodar** | túnel SSH + kubeconfig próprio (não mexe no `~/.kube/config`); atalhos em `scripts/azure.sh`; guia em `docs/azure.md` |
 | AZ4 | SealedSecret do `l2-secrets` + backup da chave | ⏳ | primeiro uso real do Sealed Secrets (`docs/sealed-secrets.md`) |
 | AZ5 | Primeiro `apply` + smoke contra o IP público | ⏳ | o que prova de verdade o AZ1 |
