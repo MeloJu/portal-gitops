@@ -15,7 +15,7 @@
   "panels": [
     {
       "id": 1,
-      "title": "Cliques por minuto (humanos)",
+      "title": "Cliques por minuto",
       "type": "stat",
       "datasource": {
         "type": "prometheus",
@@ -29,7 +29,7 @@
       },
       "targets": [
         {
-          "expr": "sum(rate(l2_travels_total{bot=\"false\"}[1m])) * 60",
+          "expr": "sum(rate(l2_travels_total[1m])) * 60",
           "legendFormat": "",
           "refId": "A",
           "datasource": {
@@ -52,7 +52,8 @@
         },
         "colorMode": "value",
         "graphMode": "area"
-      }
+      },
+      "description": "Todas as viagens. A API separa robôs pelo User-Agent (curl conta como bot); o painel ao lado mostra a divisão."
     },
     {
       "id": 2,
