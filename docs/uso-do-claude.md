@@ -27,6 +27,7 @@ para o critério de uso do copiloto. É atualizado junto com o trabalho, não no
 | 9 | "adiciona esse André e Eduardo como code owner" (com print da lista de colaboradores) | O Claude leu os usuários no print (`drezix`, `eduardoberlink`) e **confirmou pela API** que ambos têm escrita antes de os pôr no `CODEOWNERS` |
 | 10 | "sim pode, e depois pode ir para a próxima task" | README com a equipe; validação do app-of-apps `root` depois do merge do PR #1; task P2 (Sealed Secrets) |
 | 11 | "não vai ter oracle por enquanto, pensa como se fosse local, mas pode continuar" | Escopo reduzido ao cluster local: P3 só com self-signed, Let's Encrypt adiado; P4 e P6 feitas |
+| 12 | "corrige o que tá errado primeiro, depois vai para observabilidade" | PR #5 com o status real das tasks; depois a observabilidade completa (PR desta etapa) |
 
 ## O que o Claude errou (e como foi pego)
 
@@ -49,6 +50,10 @@ humana pegaram falhas que o código gerado escondia**.
 | `printf` montando JSON do patch do ArgoCD | `
 ` virou quebra de linha real, o `kubectl patch` falhou e o loop de espera rodou 5 min à toa | Patch montado com Python e aplicado via `--patch-file` |
 | Gatilho do `pr-validate` só para base `main`/`develop` | O PR #4, retargetado para `develop` depois do merge do #3, ficou com os 4 checks obrigatórios em *Waiting for status* (o retarget dispara `edited`, que não estava na lista). O usuário achou que os testes tinham quebrado | Workflow passa a rodar em qualquer base e no evento `edited`; o #4 rodou e ficou verde |
+| ConfigMap fixo para a config da API | Mudei `OTEL_SDK_DISABLED` para `false`, o ArgoCD aplicou, e o processo da API continuou com `true`: env de ConfigMap só é lido na partida | `configMapGenerator` com hash no nome: mudar a config dispara o rollout sozinho |
+| Nome `MANAGEMENT_..._PERCENTILES_HISTOGRAM_...` | A API entrou em CrashLoop. Primeiro suspeitei do agente OTel deixando o boot lento; medi fora do cluster e o agente até acelerava o boot (22 s contra 35 s). O log mostrou o erro real de binding | `PERCENTILESHISTOGRAM` (o hífen some em variável de ambiente); testado com a imagem antes de commitar |
+| Service graph do Tempo vazio | Painel "Mapa de serviços" sem dado | Li o chart: os processadores ficam em `overrides.defaults.metrics_generator` |
+| Painel "cliques humanos" | Sob carga marcou 0: o `curl` é classificado como bot pelo User-Agent | Painel conta todas as viagens; a divisão bot/humano fica no gráfico ao lado |
 | G1 marcada como feita | O usuário perguntou se as Gs estavam prontas; a `main` não existia | Status corrigido para parcial |
 
 ## Decisões que o Claude propôs e a equipe aceitou ou mudou

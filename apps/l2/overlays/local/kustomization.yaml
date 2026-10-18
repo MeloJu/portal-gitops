@@ -21,23 +21,20 @@ images:
   - name: ghcr.io/meloju/portal-app-tools-api
     newTag: sha-pending
 
+configMapGenerator:
+  - name: l2-config
+    behavior: merge
+    literals:
+      - PUBLIC_BASE_URL=http://l2.localhost
+      # Sem redirect para HTTPS no local: o cookie Secure não voltaria por HTTP. NUNCA no oracle.
+      - SESSION_COOKIE_SECURE=false
+      # Demo: o limite padrão (60 viagens/min por IP) trava o loop de cliques antes de gerar CPU
+      # para o HPA. Login e cadastro ficam no padrão, para a cena de "ameaça bloqueada".
+      - APP_RATELIMIT_TRAVEL_CAPACITY=6000
+      # Separa os traces por ambiente no Tempo/Grafana.
+      - OTEL_RESOURCE_ATTRIBUTES=deployment.environment=local
+
 patches:
-  - target:
-      kind: ConfigMap
-      name: l2-config
-    patch: |-
-      - op: replace
-        path: /data/PUBLIC_BASE_URL
-        value: http://l2.localhost
-      # Sem TLS no local: o cookie Secure não voltaria por HTTP. NUNCA no overlay oracle.
-      - op: replace
-        path: /data/SESSION_COOKIE_SECURE
-        value: "false"
-      # Demo: o limite padrão (60 viagens/min por IP) trava o loop de cliques antes de gerar
-      # CPU para o HPA. Login e cadastro continuam no padrão para a cena de "ameaça bloqueada".
-      - op: add
-        path: /data/APP_RATELIMIT_TRAVEL_CAPACITY
-        value: "6000"
   - target:
       kind: Ingress
       name: l2

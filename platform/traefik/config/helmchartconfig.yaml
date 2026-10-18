@@ -29,3 +29,12 @@ spec:
       websecure:
         forwardedHeaders:
           trustedIPs: *trusted
+    # Primeiro span de cada requisição (a porta de entrada do cluster). O Traefik propaga o
+    # `traceparent` para a API, então o trace fica: Traefik -> l2-api -> JDBC (Postgres).
+    tracing:
+      serviceName: traefik
+      otlp:
+        enabled: true
+        http:
+          enabled: true
+          endpoint: http://otel-collector.observability:4318/v1/traces

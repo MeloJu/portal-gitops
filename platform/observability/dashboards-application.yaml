@@ -1,0 +1,24 @@
+# Dashboards do Grafana versionados no Git: cada ConfigMap com o label `grafana_dashboard`
+# é carregado pelo sidecar do Grafana. Editar um painel = commit no JSON.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: observability-dashboards
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: platform
+  source:
+    repoURL: https://github.com/MeloJu/portal-gitops.git
+    targetRevision: develop
+    path: platform/observability/dashboards
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: observability
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

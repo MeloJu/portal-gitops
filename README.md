@@ -28,7 +28,7 @@ arquitetura e os riscos estão em [`TASKS.md`](TASKS.md).
 
 > **Estado atual.** ✅ pronto e validado em cluster real · 🚧 planejado, ver [`TASKS.md`](TASKS.md)
 >
-> ✅ TLS self-signed (cert-manager) e IP real do cliente no Traefik · ✅ Sealed Secrets (controller + scripts) · ✅ aplicação no Kubernetes (API, banco, frontend, tools-api, Ingress, HPA) · ✅ ArgoCD sincronizando o repositório ·
+> ✅ OpenTelemetry → Tempo, Prometheus e Grafana com o dashboard da Lumi (trace Traefik → API → Postgres) · ✅ TLS self-signed (cert-manager) e IP real do cliente no Traefik · ✅ Sealed Secrets (controller + scripts) · ✅ aplicação no Kubernetes (API, banco, frontend, tools-api, Ingress, HPA) · ✅ ArgoCD sincronizando o repositório ·
 > ✅ CI de PR (kustomize, kubeconform, yamllint, gitleaks) ·
 > 🚧 imagens publicadas pelo `portal-app` com bump automático · 🚧 OpenTelemetry, Tempo, Prometheus e Grafana ·
 > 🚧 NetworkPolicies · 🚧 ambiente Oracle e `terraform/` (adiados)
@@ -44,9 +44,9 @@ graph LR
     API -->|"JDBC via nome do Service<br/>(DNS interno, nunca IP)"| SVC["Service: postgres"]
     SVC --> DB["Deployment: postgres 18<br/>1 réplica, strategy Recreate"]
     DB --> PVC[("PVC: postgres-pvc")]
-    API -.->|"actuator :8081<br/>só dentro do cluster"| PROM["Prometheus 🚧"]
-    API -.->|OTLP| OC["OTel Collector 🚧"] -.-> TE["Tempo 🚧"]
-    PROM -.-> GF["Grafana 🚧"]
+    API -.->|"actuator :8081<br/>só dentro do cluster"| PROM["Prometheus"]
+    API -.->|OTLP| OC["OTel Collector"] -.-> TE["Tempo"]
+    PROM -.-> GF["Grafana"]
     TE -.-> GF
 ```
 
@@ -90,7 +90,8 @@ k3d cluster create l2 --port "80:80@loadbalancer" --port "443:443@loadbalancer"
 | Argo CD | v3.5.5 | GitOps: sincroniza este repositório com o cluster |
 | `postgres` | 18-alpine (`sha256:77f58511…`) | banco de dados |
 | Traefik | v3.6.13 (embutido no K3s) | Ingress |
-| OpenTelemetry Java agent | 2.32.0 (na imagem da API) | traces (desligado até o Collector existir) |
+| OpenTelemetry Java agent | 2.32.0 (na imagem da API) | traces da API e do JDBC |
+| kube-prometheus-stack · Tempo · OTel Collector | 92.10.1 · 1.24.4 · 0.176.0 (charts) | métricas, traces, dashboards |
 | `kubeconform` | v0.8.0 | validação de schema dos manifests |
 | `yamllint` | 1.37.1 | estilo dos YAMLs |
 | `gitleaks-action` | v2.3.9 | segredos no Git |
@@ -192,6 +193,7 @@ k3d cluster delete l2        # remove o cluster inteiro
 | --- | --- |
 | [`TASKS.md`](TASKS.md) | Plano por épico, decisões de arquitetura, riscos e checklist de entregáveis |
 | [`docs/uso-do-claude.md`](docs/uso-do-claude.md) | Como o Claude foi usado: prompts, decisões e o que ele errou |
+| [`docs/observabilidade.md`](docs/observabilidade.md) | OpenTelemetry, Tempo, Prometheus e Grafana: o trace verificado, os painéis e as pegadinhas |
 | [`docs/plataforma-local.md`](docs/plataforma-local.md) | cert-manager e TLS, Traefik com IP real do cliente, metrics-server, com o que foi verificado |
 | [`docs/sealed-secrets.md`](docs/sealed-secrets.md) | Segredo no Git: como selar, escopo, **backup da chave** e o que foi comprovado em cluster |
 | [`apps/l2/base/`](apps/l2/base) | Os manifests, com o *porquê* de cada decisão nos comentários |
@@ -234,7 +236,7 @@ portal-gitops/
 │   ├── 📂 base/              # manifests da aplicação (namespace l2)
 │   └── 📂 overlays/          # local (k3d, segue develop) · ci (kind efêmero) · oracle 🚧
 ├── 📂 bootstrap/             # ArgoCD (versão fixada) + app-of-apps
-├── 📂 platform/              # plataforma via ArgoCD: sealed-secrets, cert-manager, traefik (observabilidade 🚧)
+├── 📂 platform/              # plataforma via ArgoCD: sealed-secrets, cert-manager, traefik, observabilidade
 ├── 📂 scripts/               # bootstrap-local.sh, load-local-images.sh, seal-secret.sh, sealed-secrets-key.sh
 ├── 📂 docs/                  # uso do Claude, e a documentação dos marcos
 ├── 📂 .github/workflows/     # pr-validate.yml

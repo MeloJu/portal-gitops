@@ -1,0 +1,21 @@
+# O Prometheus coleta as métricas da API na porta `management` (8081), por dentro do cluster.
+# É lá que estão l2_travels_total (cliques), l2_threats_blocked_total, l2_links_total,
+# http_server_requests_seconds (latência, erros) e as da JVM.
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: l2-api
+  labels:
+    app.kubernetes.io/name: l2-api
+    app.kubernetes.io/part-of: l2
+  annotations:
+    # O CRD vem do kube-prometheus-stack; na primeira passada ele pode ainda não existir.
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: l2-api
+  endpoints:
+    - port: management
+      path: /actuator/prometheus
+      interval: 15s
