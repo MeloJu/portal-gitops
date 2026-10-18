@@ -106,6 +106,10 @@ humana pegaram falhas que o código gerado escondia**.
   do Service do Traefik (`expose.default: false`) para não ir parar no LoadBalancer; o Prometheus lê
   direto do pod, por dentro do cluster, como faz com o Actuator. Junto, `asDefault: true` em `web` e
   `websecure`, para as rotas dos Ingress não entrarem também nos entrypoints internos.
+- **C5 (check Terraform obrigatório) aplicada pelo dono, não pelo agente**: a task é configuração do GitHub
+  (branch protection), fora do Git, e o agente não tem admin. Ele parou em vez de tentar contornar; o
+  dono incluiu `Terraform (fmt, validate, scan)` nos `required_status_checks.contexts` de `develop` e `main`
+  (9 checks) e o agente só registrou a evidência no `TASKS.md`.
 
 ## Próximas entradas
 
