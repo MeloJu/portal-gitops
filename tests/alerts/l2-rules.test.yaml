@@ -1,0 +1,91 @@
+# Testes das regras de alerta (apps/l2/base/alerts.yaml) com séries sintéticas.
+#   ./tests/alerts/run.sh
+# Cada caso prova que o alerta dispara quando deve E que fica quieto quando não deve.
+rule_files:
+  - l2-rules.yaml
+evaluation_interval: 1m
+
+tests:
+  - name: API fora por 3 minutos dispara; antes de 2 minutos não
+    interval: 1m
+    input_series:
+      - series: 'up{namespace="l2", service="l2-api"}'
+        values: "0 0 0 0"
+    alert_rule_test:
+      - eval_time: 1m
+        alertname: L2ApiFora
+        exp_alerts: []
+      - eval_time: 3m
+        alertname: L2ApiFora
+        exp_alerts:
+          - exp_labels: { severity: critical }
+            exp_annotations:
+              summary: A API (l2-api) não responde ao Prometheus há 2 minutos.
+              description: Sem a API não há cadastro, criação de links nem redirecionamento.
+
+  - name: API de pé não alerta
+    interval: 1m
+    input_series:
+      - series: 'up{namespace="l2", service="l2-api"}'
+        values: "1 1 1 1"
+    alert_rule_test:
+      - eval_time: 3m
+        alertname: L2ApiFora
+        exp_alerts: []
+
+  - name: Banco fora por 2 minutos dispara
+    interval: 1m
+    input_series:
+      - series: 'pg_up{namespace="l2"}'
+        values: "1 0 0 0"
+    alert_rule_test:
+      - eval_time: 3m
+        alertname: L2BancoFora
+        exp_alerts:
+          - exp_labels: { severity: critical }
+            exp_annotations:
+              summary: O Postgres está fora (pg_up = 0) há 1 minuto.
+              description: A API continua de pé, mas toda operação que toca o banco falha.
+
+  - name: 10% de 5xx com tráfego por 6 minutos dispara
+    interval: 1m
+    input_series:
+      # 10 req/s no total, 1 req/s de 5xx (o contador sobe 600 e 60 por minuto)
+      - series: 'http_server_requests_seconds_count{namespace="l2", uri="/api/links", status="200"}'
+        values: "0+540x15"
+      - series: 'http_server_requests_seconds_count{namespace="l2", uri="/api/links", status="500"}'
+        values: "0+60x15"
+    alert_rule_test:
+      - eval_time: 12m
+        alertname: L2ApiErros5xx
+        exp_alerts:
+          - exp_labels: { severity: warning }
+            exp_annotations:
+              summary: Mais de 5% das respostas da API são 5xx há 5 minutos.
+              description: Ver o painel "Taxa de erro 5xx" e os traces com erro no Tempo.
+
+  - name: 1% de 5xx não alerta
+    interval: 1m
+    input_series:
+      - series: 'http_server_requests_seconds_count{namespace="l2", uri="/api/links", status="200"}'
+        values: "0+594x15"
+      - series: 'http_server_requests_seconds_count{namespace="l2", uri="/api/links", status="500"}'
+        values: "0+6x15"
+    alert_rule_test:
+      - eval_time: 12m
+        alertname: L2ApiErros5xx
+        exp_alerts: []
+
+  - name: Rajada de ameaças dispara (info) na hora
+    interval: 1m
+    input_series:
+      - series: 'l2_threats_blocked_total{reason="RATE_LIMIT", pod="l2-api-a"}'
+        values: "0 1 2 3 4"
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: L2PicoDeAmeacas
+        exp_alerts:
+          - exp_labels: { severity: info }
+            exp_annotations:
+              summary: A Lumi bloqueou 4 ameaças nos últimos 5 minutos.
+              description: Rajada de login/cadastro/viagens acima do limite. Ver o painel "Ameaças bloqueadas por motivo".

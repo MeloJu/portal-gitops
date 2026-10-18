@@ -12,6 +12,7 @@ resources:
   - api-hpa.yaml
   - api-pdb.yaml
   - api-servicemonitor.yaml
+  - alerts.yaml
   - tools-api.yaml
   - frontend.yaml
   - ingress.yaml

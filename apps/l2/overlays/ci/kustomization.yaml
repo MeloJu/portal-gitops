@@ -49,6 +49,15 @@ patches:
       metadata:
         name: ratelimit
   - target:
+      kind: PrometheusRule
+      name: l2
+    patch: |-
+      $patch: delete
+      apiVersion: monitoring.coreos.com/v1
+      kind: PrometheusRule
+      metadata:
+        name: l2
+  - target:
       kind: PodMonitor
       name: postgres
     patch: |-

@@ -1,0 +1,78 @@
+# Alertas da aplicação, avaliados pelo Prometheus (o kube-prometheus-stack lê PrometheusRule de qualquer
+# namespace). Sem Alertmanager instalado: os alertas aparecem no Prometheus (/alerts) e no Grafana.
+# Testados com `promtool test rules` em tests/alerts/ (o CI roda os testes a cada PR).
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: l2
+  labels:
+    app.kubernetes.io/part-of: l2
+  annotations:
+    # O CRD vem do kube-prometheus-stack; na primeira passada ele pode ainda não existir.
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+spec:
+  groups:
+    - name: l2-disponibilidade
+      rules:
+        - alert: L2ApiFora
+          # `absent` cobre o caso em que nem existe alvo (Deployment zerado, ServiceMonitor quebrado).
+          expr: sum(up{namespace="l2", service="l2-api"}) == 0 or absent(up{namespace="l2", service="l2-api"})
+          for: 2m
+          labels:
+            severity: critical
+          annotations:
+            summary: A API (l2-api) não responde ao Prometheus há 2 minutos.
+            description: Sem a API não há cadastro, criação de links nem redirecionamento.
+        - alert: L2BancoFora
+          expr: max(pg_up{namespace="l2"}) == 0 or absent(pg_up{namespace="l2"})
+          for: 1m
+          labels:
+            severity: critical
+          annotations:
+            summary: O Postgres está fora (pg_up = 0) há 1 minuto.
+            description: A API continua de pé, mas toda operação que toca o banco falha.
+        - alert: L2PodReiniciando
+          expr: increase(kube_pod_container_status_restarts_total{namespace="l2"}[15m]) > 3
+          labels:
+            severity: warning
+          annotations:
+            summary: "O container {{ $labels.container }} do pod {{ $labels.pod }} reiniciou mais de 3 vezes em 15 minutos."
+            description: Provável CrashLoop (configuração inválida, OOMKill, probe falhando).
+
+    - name: l2-qualidade
+      rules:
+        - alert: L2ApiErros5xx
+          # Mínimo de 0,5 req/s para não alertar com 1 erro em 2 requisições.
+          expr: |
+            (
+              sum(rate(http_server_requests_seconds_count{namespace="l2", uri!~"/actuator.*", status=~"5.."}[5m]))
+              / sum(rate(http_server_requests_seconds_count{namespace="l2", uri!~"/actuator.*"}[5m]))
+            ) > 0.05
+            and sum(rate(http_server_requests_seconds_count{namespace="l2", uri!~"/actuator.*"}[5m])) > 0.5
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: Mais de 5% das respostas da API são 5xx há 5 minutos.
+            description: Ver o painel "Taxa de erro 5xx" e os traces com erro no Tempo.
+        - alert: L2ApiLenta
+          expr: |
+            histogram_quantile(0.95, sum by (le) (rate(http_server_requests_seconds_bucket{namespace="l2", uri!~"/actuator.*"}[5m]))) > 1
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: O p95 de latência da API passou de 1 s há 5 minutos.
+            description: Ver o painel de latência; os exemplars levam ao trace de uma requisição lenta.
+
+    - name: l2-seguranca
+      rules:
+        - alert: L2PicoDeAmeacas
+          # Cada recusa de rate limit conta uma vez por janela de 1 min, por IP e por pod (RateLimiter do
+          # portal-app). 3 em 5 minutos já é um padrão de força bruta, não um usuário errando a senha.
+          expr: sum(increase(l2_threats_blocked_total[5m])) >= 3
+          labels:
+            severity: info
+          annotations:
+            summary: A Lumi bloqueou {{ $value | humanize }} ameaças nos últimos 5 minutos.
+            description: Rajada de login/cadastro/viagens acima do limite. Ver o painel "Ameaças bloqueadas por motivo".
