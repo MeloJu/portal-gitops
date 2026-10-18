@@ -29,6 +29,19 @@ spec:
       websecure:
         forwardedHeaders:
           trustedIPs: *trusted
+      # Entrypoint só das métricas, no pod e fora do Service: como o Actuator, é lido pelo
+      # Prometheus por dentro do cluster (PodMonitor `traefik` em platform/observability).
+      metrics:
+        port: 9100
+        expose:
+          default: false
+    # Requisições, latência e conexões por entrypoint e por serviço (traefik_entrypoint_*,
+    # traefik_service_*).
+    metrics:
+      prometheus:
+        entryPoint: metrics
+        addEntryPointsLabels: true
+        addServicesLabels: true
     # Primeiro span de cada requisição (a porta de entrada do cluster). O Traefik propaga o
     # `traceparent` para a API, então o trace fica: Traefik -> l2-api -> JDBC (Postgres).
     tracing:

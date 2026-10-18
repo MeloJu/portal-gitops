@@ -64,6 +64,9 @@ humana pegaram falhas que o código gerado escondia**.
 - **Janela de 60 s no scale-up do HPA**: o boot da JVM (Spring + Flyway) gerava scale-up em cascata.
 - **Limite de viagens alto só no overlay `local`** (`APP_RATELIMIT_TRAVEL_CAPACITY`): o padrão de 60/min
   por IP trava o loop de cliques antes de gerar CPU para o HPA. Login e cadastro ficam no padrão.
+- **Métricas do Traefik por PodMonitor, não ServiceMonitor** (O4): a porta `metrics` (9100) fica fora
+  do Service do Traefik (`expose.default: false`) para não ir parar no LoadBalancer; o Prometheus lê
+  direto do pod, por dentro do cluster, como faz com o Actuator.
 
 ## Próximas entradas
 
