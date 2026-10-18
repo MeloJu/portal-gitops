@@ -27,9 +27,9 @@ Projeto do hackathon *Portal dos Links* (CloudOps Bootcamp). O plano completo, a
 arquitetura e os riscos estão em [`TASKS.md`](TASKS.md).
 
 > **Estado do projeto.** Os componentes locais e o fluxo GitOps foram verificados em cluster em
-> execuções anteriores; a disponibilidade atual depende da infraestrutura. O Azure ainda não foi
-> aplicado. Capturas reais e o roteiro da apresentação: [`docs/evidencias/`](docs/evidencias/README.md)
-> e [`PITCH.md`](PITCH.md).
+> execuções anteriores; a disponibilidade atual depende da infraestrutura. O ambiente Azure foi
+> aplicado (VM com K3s, ArgoCD seguindo a `main`, HTTPS): ver [`docs/azure.md`](docs/azure.md).
+> Capturas reais: [`docs/evidencias/`](docs/evidencias/README.md).
 
 ## 🏗️ Arquitetura
 
@@ -255,8 +255,6 @@ portal-gitops/
 
 ## 🎤 Apresentação e evidências
 
-- [`PITCH.md`](PITCH.md): roteiro cronometrado de 15 minutos, com falas, transições e plano
-  alternativo para falhas.
 - [`docs/evidencias/README.md`](docs/evidencias/README.md): fontes e critérios para capturar
   provas reais de Actions, ArgoCD, Grafana/HPA, Tempo e alertas. As capturas dependentes de
   infraestrutura ainda precisam ser feitas quando os serviços estiverem disponíveis.
