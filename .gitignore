@@ -28,3 +28,7 @@ sealed-secrets-key*.yaml
 # Plano do Terraform (pode carregar valores sensíveis)
 tfplan
 *.tfplan
+
+# Retirados do repositorio a pedido do dono (a copia local fica na maquina, fora do Git)
+/CLAUDE.md
+/PITCH.md
