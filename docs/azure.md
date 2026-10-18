@@ -48,9 +48,11 @@ scripts/seal-secret.sh l2-secrets l2 JWT_SECRET DB_PASSWORD POSTGRES_PASSWORD \
   > apps/l2/overlays/azure/sealed-secret.yaml                         # pede cada valor, sem eco
 ```
 
-Depois: acrescente `- sealed-secret.yaml` em `resources:` do `apps/l2/overlays/azure/kustomization.yaml`
-e abra um PR normal. **Guarde as senhas escolhidas** (um gerenciador de senhas): o Postgres só aplica
-`POSTGRES_PASSWORD` quando o volume está vazio.
+Depois: o `sealed-secret.yaml` já está em `resources:` do `apps/l2/overlays/azure/kustomization.yaml`
+(basta refazer o arquivo e abrir um PR normal para trocar os valores). Os valores usados foram
+aleatórios e **não precisam ser lembrados**: o controller os grava no Secret `l2-secrets` do
+cluster, de onde dá para lê-los. Cuidado só ao **trocar** `POSTGRES_PASSWORD`: o Postgres só aplica
+essa senha quando o volume está vazio.
 
 Em seguida, **faça o backup da chave do controller** e guarde fora do Git. Se a VM for recriada sem
 ele, todo SealedSecret do repositório fica ilegível:

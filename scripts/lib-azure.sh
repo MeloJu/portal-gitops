@@ -59,7 +59,8 @@ fetch_kubeconfig() {
 
 wait_api() {
   for _ in $(seq 1 30); do
-    kubectl get --raw /readyz >/dev/null 2>&1 && return 0
+    # `get nodes` e não `get --raw /readyz`: o Git Bash do Windows converte "/readyz" num caminho do disco.
+    kubectl get nodes >/dev/null 2>&1 && return 0
     sleep 1
   done
   echo "A API do cluster não respondeu pelo túnel (localhost:${LOCAL_PORT})." >&2

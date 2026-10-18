@@ -3,7 +3,11 @@
 useDefault = true
 
 [allowlist]
-description = "Secret descartável do smoke test (kind efêmero); nunca é usado fora do CI"
+description = "Secret descartável do smoke test (kind efêmero) e SealedSecrets (cifrados)"
 paths = [
   '''apps/l2/overlays/ci/secret\.yaml''',
+  # SealedSecret: o valor é texto cifrado com a chave pública do cluster (o gitleaks o lê como
+  # "generic-api-key"). Só o controller do cluster o abre. Um Secret em claro no mesmo lugar
+  # continua barrado pelo job "Nenhum Secret em claro" (kind: Secret fora do overlay ci).
+  '''apps/l2/overlays/[a-z0-9-]+/sealed-secret\.yaml''',
 ]
