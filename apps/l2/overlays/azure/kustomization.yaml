@@ -5,8 +5,9 @@ kind: Kustomization
 namespace: l2
 resources:
   - ../../base
-# O Secret `l2-secrets` entra como SealedSecret (task AZ4): só o controller deste cluster o abre.
-# Gerado com scripts/seal-secret.sh (docs/azure.md e docs/sealed-secrets.md).
+  # O Secret `l2-secrets` entra cifrado: só o controller deste cluster o abre. Valores aleatórios,
+  # selados com scripts/seal-secret.sh (docs/azure.md e docs/sealed-secrets.md).
+  - sealed-secret.yaml
 
 # As imagens do Azure NÃO seguem o bump automático (que edita o overlay `local`): a promoção é
 # deliberada, copiando este bloco a partir do `local` depois que a versão provou-se lá (task D5).
