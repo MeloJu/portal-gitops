@@ -7,16 +7,16 @@ cluster**: o ArgoCD sincroniza o que está aqui. O código da aplicação vive e
 Leia antes de mexer: [`TASKS.md`](TASKS.md) (plano, decisões, riscos) e [`README.md`](README.md).
 
 ## Stack
-Kubernetes (k3d/K3s local, K3s na Oracle depois) · Kustomize · ArgoCD (app-of-apps) · GitHub Actions ·
+Kubernetes (k3d/K3s local; K3s numa VM Azure, ver `terraform/`) · Kustomize · ArgoCD (app-of-apps) · GitHub Actions ·
 OpenTelemetry → Tempo · Prometheus · Grafana. Namespace da app: `l2`.
 
 ## Estrutura
-- `apps/l2/base/` manifests · `apps/l2/overlays/{local,ci,oracle}` por ambiente (o bump de imagem edita só o bloco `images:`)
+- `apps/l2/base/` manifests · `apps/l2/overlays/{local,ci,azure}` por ambiente (o bump de imagem edita só o bloco `images:`)
 - `bootstrap/` ArgoCD + app-of-apps · `scripts/` · `.github/workflows/`
 
 ## Regras que não se negociam
 1. **Mudança só pelo Git.** `kubectl patch/edit` à mão é revertido pelo ArgoCD (`selfHeal`). Para testar, commite numa branch.
-2. **Secret nunca em claro.** `kind: Secret` só no overlay `ci` (valores descartáveis). Local: criado por `scripts/bootstrap-local.sh`. Oracle: SealedSecret.
+2. **Secret nunca em claro.** `kind: Secret` só no overlay `ci` (valores descartáveis). Local: criado por `scripts/bootstrap-local.sh`. Azure: SealedSecret.
 3. **Paths do Ingress terminam em `/`** (`/r/`, `/api/`). O Traefik trata `Prefix` como prefixo de texto: `/r` capturaria o link curto `rocket`.
 4. **Actuator (8081) nunca no Ingress.** Probes e Prometheus entram por dentro do cluster.
 5. **Postgres usa `strategy: Recreate`** (PVC `ReadWriteOnce`). A API usa a role `l2_app`, nunca o superuser.
@@ -24,7 +24,7 @@ OpenTelemetry → Tempo · Prometheus · Grafana. Namespace da app: `l2`.
 7. **Sem `latest`**; imagens de terceiros por digest.
 
 ## Fluxo
-Gitflow: `main` (produção/oracle) ← `release/*` ou `develop` ← `feature/*`, `fix/*`, `chore/*`; `hotfix/*` sai da `main`.
+Gitflow: `main` (produção/azure) ← `release/*` ou `develop` ← `feature/*`, `fix/*`, `chore/*`; `hotfix/*` sai da `main`.
 PR obrigatório, Conventional Commits, **sem assinatura do Claude em commits e PRs**. Cada PR diz como foi validado.
 
 ## Como validar uma mudança

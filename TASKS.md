@@ -7,8 +7,8 @@ adaptando o desafio de referência [`k8s-postgrest-challenge`](https://github.co
 
 > Repo de destino: `https://github.com/MeloJu/portal-gitops`. A árvore abaixo usa o layout "l2-gitops" combinado.
 > **Copiloto de IA:** o enunciado do desafio cita o Kiro, mas a organização liberou o **Claude** no lugar. O uso é registrado em `docs/uso-do-claude.md` (critério "Uso do copiloto", 10% da nota).
-> **Escopo atual:** só o cluster **local**. O ambiente Oracle (e o que depende dele: Let's Encrypt, SealedSecret de produção, Terraform) foi adiado.
-> **Progresso:** 51 de 62 tasks feitas · faltam 6 no escopo atual (P0: 0 · P1: 3 · P2: 3) · 5 adiadas (Oracle/Terraform). Atualizado a cada PR que fecha task.
+> **Escopo atual:** cluster **local** pronto e validado; ambiente **Azure** (assinatura estudantil) em construção, ver §12. O Oracle foi descartado.
+> **Progresso:** 54 de 62 tasks feitas · faltam 8 (P0: 0 · P1: 5 · P2: 3) · 0 adiadas. O ambiente Azure (§12) tem 5 passos próprios. Atualizado a cada PR que fecha task.
 > **Status:** M1 e a plataforma local (P1–P6) feitos e mergeados na `develop`; G1–G4 feitos. Próximo: observabilidade (O1–O7). Legenda das notas: ✅ feito · ◐ parcial · ⏸ adiado.
 > Legenda: **P0** = sem isso não há demo · **P1** = nota alta · **P2** = diferencial. Tamanho: **S** (<1h) · **M** (1–3h) · **L** (>3h).
 
@@ -289,8 +289,8 @@ Actions pinadas **por SHA com comentário de versão**, `permissions: contents: 
   ✅ *Feito:* `.github/workflows/smoke-e2e.yml` + `tests/smoke.sh`: cluster **kind efêmero** a cada PR/push (binário com checksum, nó 1.35 por digest), overlay `ci` com as **mesmas tags do overlay `local`**, 13 verificações (readiness, cadastro, link, `302` com cabeçalhos de privacidade, métricas na 8081, **persistência após destruir o pod do Postgres**, SPA e nginx → tools-api). Passou em 1 min 43 s e virou check **obrigatório**: um PR de bump só entra se a imagem subir num cluster de verdade. Na primeira execução pegou um bug real: os scripts estavam sem bit de execução no Git (editados no Windows).
 - [x] **C3 · P2 · S — Dependabot/Renovate** para Actions e charts.
   ✅ *Feito:* `.github/dependabot.yml`: GitHub Actions (fixadas por SHA), um PR agrupado por semana na `develop`. O check Gitflow passou a aceitar branches `dependabot/*` (sem isso todo PR do Dependabot seria recusado). Charts Helm do ArgoCD ficam à mão (o Dependabot não os suporta).
-- [ ] **C4 · P2 · M — `terraform fmt/validate` + `tflint`/`tfsec`** no mesmo workflow quando `terraform/**` mudar.
-  ⏸ *Adiado:* depende do `terraform/`, que foi adiado com o ambiente Oracle.
+- [x] **C4 · P2 · M — `terraform fmt/validate` + `tflint`/`tfsec`** no mesmo workflow quando `terraform/**` mudar.
+  ✅ *Feito:* job `Terraform (fmt, validate, scan)` no CI: `fmt -check`, `init -backend=false` + `validate` e **Trivy IaC com exit 1** em qualquer achado. Provado: limpo hoje; com o SSH aberto ao mundo ele **falha**. Os 3 achados intencionais estão justificados no `main.tf` (`#trivy:ignore`). Achou também uma janela real: a VM podia nascer antes do firewall (corrigido com `depends_on`).
 
 ### Épico D — CD / integração com o `portal-app`
 
@@ -307,13 +307,13 @@ Actions pinadas **por SHA com comentário de versão**, `permissions: contents: 
 ### Épico T — Terraform / Oracle Cloud (`terraform/`)
 
 - [ ] **T1 · P1 · M — Rede e VM:** VCN, subnet, security list (22 restrito, 80, 443; **não** expor 6443/8081), instância **Ampere A1.Flex** (Free Tier), chave SSH.
-  ⏸ *Adiado:* adiado: ambiente Oracle fora do escopo por enquanto.
+  ◐ *Parcial:* Ambiente **Azure** (substitui o Oracle, que foi descartado): ver [`terraform/README.md`](terraform/README.md). VNet, IP público estático com DNS grátis, NSG na **sub-rede** (só 80/443; 22 só do seu IP; 6443/Actuator/Grafana fechados) e VM `Standard_B2ms`. `fmt`, `validate`, validações de variável e Trivy limpos. **Falta o `apply` numa conta real** (precisa das suas credenciais e da checagem de região/tamanho).
 - [ ] **T2 · P1 · M — K3s via cloud-init** (Traefik habilitado) e saída do `kubeconfig`; opcionalmente já instala o ArgoCD e aplica o `bootstrap/`.
-  ⏸ *Adiado:* adiado: ambiente Oracle fora do escopo por enquanto.
-- [ ] **T3 · P1 · S — Estado e segredos:** backend remoto (bucket OCI) ou local **fora do Git**; variáveis sensíveis em `*.tfvars` ignorado; `terraform.tfvars.example` versionado.
-  ⏸ *Adiado:* adiado: ambiente Oracle fora do escopo por enquanto.
-- [ ] **T4 · P2 · S — `terraform destroy` documentado** (custo/limpeza) e `docs/` com o passo a passo do `apply` até o ArgoCD sincronizando.
-  ⏸ *Adiado:* adiado: ambiente Oracle fora do escopo por enquanto.
+  ◐ *Parcial:* K3s `v1.35.5+k3s1` (a mesma do k3d) instalado por cloud-init, aprovado pelo `cloud-init schema` oficial; kubeconfig por túnel SSH (a 6443 não é exposta). **Falta provar numa VM de verdade.** O ArgoCD e o app-of-apps na VM dependem do overlay `azure` e do `bootstrap-azure.sh` (abaixo).
+- [x] **T3 · P1 · S — Estado e segredos:** backend remoto (bucket OCI) ou local **fora do Git**; variáveis sensíveis em `*.tfvars` ignorado; `terraform.tfvars.example` versionado.
+  ✅ *Feito:* estado local fora do Git (`*.tfstate`, `*.tfvars`, `.terraform/` no `.gitignore`) e `terraform.tfvars.example` versionado; lockfile dos providers no Git. Backend remoto fica fora: o estado de uma VM de estudante não justifica um bucket.
+- [x] **T4 · P2 · S — `terraform destroy` documentado** (custo/limpeza) e `docs/` com o passo a passo do `apply` até o ArgoCD sincronizando.
+  ✅ *Feito:* `terraform/README.md`: passo a passo do `apply`, custo, `deallocate`/ligar, `destroy` (com o aviso de que o banco vai junto) e tabela de solução de problemas da assinatura estudantil.
 
 ### Épico O — Observabilidade (15% da nota + categoria de prêmio)
 
@@ -454,3 +454,15 @@ Cada item diz o que entregar, como provar que está pronto e o que já existe pa
 | **D5** Gate de promoção | P2 | M | PR `release/*` → `main` verificando que as 3 tags do overlay existem no GHCR; rollback = `git revert` do bump | depende de ter um overlay de produção | **adiada de fato**: sem ambiente `oracle` não há o que promover |
 
 Ordem sugerida: **Q6** e **Q4** primeiro (são o que a banca vê), depois **S6**.
+
+## 12. Ambiente Azure (substitui o Oracle)
+
+O plano estudantil da Azure virou o ambiente "nuvem". Em vez do Oracle, a VM fica numa região permitida pela sua assinatura.
+
+| # | Task | Estado | Observação |
+| --- | --- | --- | --- |
+| AZ1 | Terraform da VM (T1–T4, C4) | ◐ escrito e validado, **não aplicado** | falta a sua conta; ver `terraform/README.md` |
+| AZ2 | Overlay `azure` do ArgoCD + `ClusterIssuer` Let's Encrypt | ⏳ | host = o `fqdn` do Terraform; `SESSION_COOKIE_SECURE=true` |
+| AZ3 | `scripts/bootstrap-azure.sh` (ArgoCD + app-of-apps na VM) | ⏳ | parecido com o `bootstrap-local.sh`, via SSH |
+| AZ4 | SealedSecret do `l2-secrets` + backup da chave | ⏳ | primeiro uso real do Sealed Secrets (`docs/sealed-secrets.md`) |
+| AZ5 | Primeiro `apply` + smoke contra o IP público | ⏳ | o que prova de verdade o AZ1 |

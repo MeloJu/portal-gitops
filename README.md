@@ -31,7 +31,7 @@ arquitetura e os riscos estão em [`TASKS.md`](TASKS.md).
 > ✅ OpenTelemetry → Tempo, Prometheus e Grafana com o dashboard da Lumi (trace Traefik → API → Postgres) · ✅ TLS self-signed (cert-manager) e IP real do cliente no Traefik · ✅ Sealed Secrets (controller + scripts) · ✅ aplicação no Kubernetes (API, banco, frontend, tools-api, Ingress, HPA) · ✅ ArgoCD sincronizando o repositório ·
 > ✅ CI de PR (kustomize, kubeconform, yamllint, gitleaks) ·
 > 🚧 imagens publicadas pelo `portal-app` com bump automático · 🚧 OpenTelemetry, Tempo, Prometheus e Grafana ·
-> 🚧 NetworkPolicies · 🚧 ambiente Oracle e `terraform/` (adiados)
+> 🚧 NetworkPolicies · 🚧 ambiente Azure: o Terraform está escrito e validado ([`terraform/`](terraform/README.md)), falta aplicar
 
 ## 🏗️ Arquitetura
 
@@ -64,8 +64,8 @@ recriado (perdendo o IP) sem a API perder a conexão.
 ## 🛠️ Ferramenta de cluster
 
 **[k3d](https://k3d.io)** (K3s dentro do Docker). É K3s de verdade: já traz **Traefik** (Ingress) e
-**metrics-server** (HPA), e aplica **NetworkPolicy**. A produção alvo é K3s numa VM na Oracle
-Cloud (🚧, provisionada por Terraform), então local e produção usam o mesmo ingress.
+**metrics-server** (HPA), e aplica **NetworkPolicy**. A produção alvo é K3s numa VM na Azure
+(provisionada por Terraform, ver [`terraform/`](terraform/README.md)), então local e produção usam o mesmo ingress.
 
 ```bash
 k3d cluster create l2 --port "80:80@loadbalancer" --port "443:443@loadbalancer"
@@ -208,7 +208,7 @@ k3d cluster delete l2        # remove o cluster inteiro
 | Por que o Postgres usa `Recreate` e a API não? | O PVC é `ReadWriteOnce` (um pod por vez); a API é sem estado e pode ter várias réplicas |
 | Por que a `startupProbe` na API? | O Spring leva 10–40 s e ainda roda o Flyway; sem ela a liveness mata o pod antes de ele ficar pronto |
 | Por que o Actuator fica na porta 8081? | O Ingress só roteia a 8080, então `/actuator/prometheus` nunca fica público |
-| Base64 num Secret é criptografia? | Não, é codificação. Por isso Secret em claro não vai para o Git: SealedSecret no oracle, e o CI barra o resto |
+| Base64 num Secret é criptografia? | Não, é codificação. Por isso Secret em claro não vai para o Git: SealedSecret no ambiente Azure, e o CI barra o resto |
 
 ## 🔐 Segurança
 
@@ -218,7 +218,7 @@ k3d cluster delete l2        # remove o cluster inteiro
 - **Containers não-root**, com filesystem raiz somente leitura, todas as capabilities removidas e
   `seccompProfile: RuntimeDefault`. O namespace `l2` aplica **Pod Security `restricted`**.
 - **Actuator isolado** na porta 8081, fora de qualquer rota do Ingress.
-- **Segredos fora do Git**: o `l2-secrets` é criado pelo script (local), selado (oracle 🚧) ou
+- **Segredos fora do Git**: o `l2-secrets` é criado pelo script (local), selado (azure 🚧) ou
   descartável (overlay `ci`). O `gitleaks` e a checagem *Nenhum Secret em claro* rodam em todo PR.
 - **Imagens de terceiros por digest**; as da aplicação por tag imutável (`sha`), definida pelo
   `images:` de cada overlay.
@@ -234,14 +234,14 @@ que o Spring as lê.
 portal-gitops/
 ├── 📂 apps/l2/
 │   ├── 📂 base/              # manifests da aplicação (namespace l2)
-│   └── 📂 overlays/          # local (k3d, segue develop) · ci (kind efêmero) · oracle 🚧
+│   └── 📂 overlays/          # local (k3d, segue develop) · ci (kind efêmero) · azure 🚧
 ├── 📂 bootstrap/             # ArgoCD (versão fixada) + app-of-apps
 ├── 📂 platform/              # plataforma via ArgoCD: sealed-secrets, cert-manager, traefik, observabilidade
 ├── 📂 scripts/               # bootstrap-local.sh, load-local-images.sh, seal-secret.sh, sealed-secrets-key.sh
 ├── 📂 docs/                  # uso do Claude, e a documentação dos marcos
 ├── 📂 .github/workflows/     # pr-validate.yml
 ├── 📄 TASKS.md               # plano do projeto
-└── 📂 terraform/             # 🚧 Oracle Cloud
+└── 📂 terraform/             # VM Azure com K3s (assinatura estudantil)
 ```
 
 ## ⚙️ CI/CD
@@ -258,7 +258,7 @@ portal-gitops/
 ## 🔀 GitFlow
 
 ```text
-main      ← produção (overlay oracle)
+main      ← produção (overlay azure)
  └── develop   ← integração (overlay local)
       ├── feature/*  fix/*  chore/*  docs/*  refactor/*
       ├── release/*   (congela e valida antes de ir para main)
@@ -277,7 +277,7 @@ main      ← produção (overlay oracle)
 - **Commits** em *Conventional Commits*: `feat(escopo):`, `fix(escopo):`, `docs:`, `chore(release): portal-app <sha7>`.
 - Cada PR usa o [template](.github/pull_request_template.md) e diz **como foi validado**, com o comando e o que se viu.
 - O bump automático de tag (CI do `portal-app`) toca **só** `apps/l2/overlays/<env>/kustomization.yaml`: o `local` no
-  `develop`, o `oracle` no `main`. Arquivos diferentes, então os merges não conflitam. O token do bot
+  `develop`, o `azure` no `main`. Arquivos diferentes, então os merges não conflitam. O token do bot
   é de administrador, que **não** é barrado pela proteção (`enforce_admins` desligado de propósito).
 
 ## 🤖 Como o Claude foi usado
