@@ -8,6 +8,8 @@ metadata:
   namespace: observability
   labels:
     app.kubernetes.io/name: traefik
+    app.kubernetes.io/component: metrics
+    app.kubernetes.io/part-of: observability
   annotations:
     # O CRD vem do kube-prometheus-stack; na primeira passada ele pode ainda não existir.
     argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true

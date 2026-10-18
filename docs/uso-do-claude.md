@@ -55,6 +55,7 @@ humana pegaram falhas que o código gerado escondia**.
 | Service graph do Tempo vazio | Painel "Mapa de serviços" sem dado | Li o chart: os processadores ficam em `overrides.defaults.metrics_generator` |
 | Painel "cliques humanos" | Sob carga marcou 0: o `curl` é classificado como bot pelo User-Agent | Painel conta todas as viagens; a divisão bot/humano fica no gráfico ao lado |
 | G1 marcada como feita | O usuário perguntou se as Gs estavam prontas; a `main` não existia | Status corrigido para parcial |
+| PodMonitor do Traefik aplicado direto pelo `root` (O4) | O `revisor-pr` apontou que, num cluster novo, o apply roda antes de o kube-prometheus-stack instalar o CRD e criar o namespace; `SkipDryRunOnMissingResource` só pula o dry-run, e o `root` (sem `retry`) ficaria em `Failed` até o próximo commit | PodMonitor movido para `platform/observability/monitors/`, sincronizado pela Application `observability-monitors` (`project: platform`, `CreateNamespace`, `retry`), no padrão dos Issuers do cert-manager |
 
 ## Decisões que o Claude propôs e a equipe aceitou ou mudou
 
@@ -66,7 +67,8 @@ humana pegaram falhas que o código gerado escondia**.
   por IP trava o loop de cliques antes de gerar CPU para o HPA. Login e cadastro ficam no padrão.
 - **Métricas do Traefik por PodMonitor, não ServiceMonitor** (O4): a porta `metrics` (9100) fica fora
   do Service do Traefik (`expose.default: false`) para não ir parar no LoadBalancer; o Prometheus lê
-  direto do pod, por dentro do cluster, como faz com o Actuator.
+  direto do pod, por dentro do cluster, como faz com o Actuator. Junto, `asDefault: true` em `web` e
+  `websecure`, para as rotas dos Ingress não entrarem também nos entrypoints internos.
 
 ## Próximas entradas
 
