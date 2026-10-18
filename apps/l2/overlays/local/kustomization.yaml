@@ -45,6 +45,18 @@ patches:
       - op: add
         path: /spec/rules/0/host
         value: l2.localhost
+      # HTTPS com certificado self-signed emitido pelo cert-manager (o navegador vai avisar).
+      # O HTTP continua respondendo: não há redirect no local, para a demo não depender do aviso.
+      - op: add
+        path: /metadata/annotations
+        value:
+          cert-manager.io/cluster-issuer: selfsigned
+      - op: add
+        path: /spec/tls
+        value:
+          - hosts:
+              - l2.localhost
+            secretName: l2-tls
   - target:
       kind: HorizontalPodAutoscaler
       name: l2-api

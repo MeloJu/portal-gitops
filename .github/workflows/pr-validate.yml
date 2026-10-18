@@ -2,8 +2,11 @@ name: PR validate
 
 # Valida os manifests antes do merge. Os jobs são independentes: um vermelho não esconde o outro.
 on:
+  # Qualquer base (PRs empilhados também validam) e `edited`: quando o GitHub retarga um PR
+  # para develop depois do merge do PR de baixo, só o `edited` dispara. Sem ele os checks
+  # obrigatórios ficavam "Waiting for status" para sempre.
   pull_request:
-    branches: [main, develop]
+    types: [opened, synchronize, reopened, edited]
   push:
     branches: [main, develop]
 
@@ -61,6 +64,15 @@ jobs:
             echo "::endgroup::"
           done
 
+      # O app-of-apps referencia platform/* por caminho relativo; um caminho errado só estoura
+      # no cluster. Aqui só renderiza (os CRDs do Argo/K3s não têm schema no kubeconform).
+      - name: kustomize build do app-of-apps e da plataforma
+        run: |
+          for dir in bootstrap/apps/*/ platform/*/ platform/*/*/; do
+            [ -f "${dir}kustomization.yaml" ] || continue
+            kubectl kustomize "$dir" > /dev/null && echo "ok  ${dir}"
+          done
+
       # Sem tag latest nem imagem sem tag/digest renderizada: o bump automático existe para isso.
       - name: Imagens sem tag fixa
         run: |
@@ -88,7 +100,7 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install yamllint==1.37.1
-      - run: yamllint -c .yamllint.yaml apps bootstrap .github
+      - run: yamllint -c .yamllint.yaml apps bootstrap platform .github
 
   gitleaks:
     name: gitleaks (segredos no Git)

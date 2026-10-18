@@ -13,6 +13,7 @@ spec:
   sourceRepos:
     - https://github.com/MeloJu/portal-gitops.git
     - https://bitnami.github.io/sealed-secrets
+    - https://charts.jetstack.io
   destinations:
     - server: https://kubernetes.default.svc
       namespace: "*"
