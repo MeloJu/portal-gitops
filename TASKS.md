@@ -8,7 +8,7 @@ adaptando o desafio de referência [`k8s-postgrest-challenge`](https://github.co
 > Repo de destino: `https://github.com/MeloJu/portal-gitops`. A árvore abaixo usa o layout "l2-gitops" combinado.
 > **Copiloto de IA:** o enunciado do desafio cita o Kiro, mas a organização liberou o **Claude** no lugar. O uso é registrado em `docs/uso-do-claude.md` (critério "Uso do copiloto", 10% da nota).
 > **Escopo atual:** só o cluster **local**. O ambiente Oracle (e o que depende dele: Let's Encrypt, SealedSecret de produção, Terraform) foi adiado.
-> **Progresso:** 44 de 62 tasks feitas · faltam 13 no escopo atual (P0: 0 · P1: 5 · P2: 8) · 5 adiadas (Oracle/Terraform). Atualizado a cada PR que fecha task.
+> **Progresso:** 45 de 62 tasks feitas · faltam 12 no escopo atual (P0: 0 · P1: 4 · P2: 8) · 5 adiadas (Oracle/Terraform). Atualizado a cada PR que fecha task.
 > **Status:** M1 e a plataforma local (P1–P6) feitos e mergeados na `develop`; G1–G4 feitos. Próximo: observabilidade (O1–O7). Legenda das notas: ✅ feito · ◐ parcial · ⏸ adiado.
 > Legenda: **P0** = sem isso não há demo · **P1** = nota alta · **P2** = diferencial. Tamanho: **S** (<1h) · **M** (1–3h) · **L** (>3h).
 
@@ -262,7 +262,8 @@ Estética da referência: labels `app.kubernetes.io/*`, comentário explicando o
 - [x] **A8 · P0 · M — `ingress.yaml`:** host único; `/` → frontend; `/api` e `/r` → API:8080; **`/otlp` → Collector:4318** (OTLP/HTTP); **sem rota para 8081**; redirect HTTP→HTTPS; TLS via cert-manager.
   `/otlp` segue §3.1 ④: só `POST /otlp/v1/traces`, `StripPrefix` → `RateLimit` por IP → `Buffering` (1 MiB), tudo em `Middleware`/`IngressRoute` do Traefik.
   ✅ *Feito:* `/otlp/v1/traces` (Exact) por HTTP e HTTPS, com rate limit (20/s, burst 50), corpo de até 1 MiB e prefixo removido, apontando para um receiver **separado** do Collector que sobrescreve `service.name`/`telemetry.source`. Verificado no cluster: span aceito (`200`), `logs`/`metrics` não chegam ao Collector, 2 MiB → `413`, rajada de 150 → 66×`429`, e uma identidade falsa (`l2-api`) gravada no Tempo como `l2-frontend`. Ver [`docs/observabilidade.md`](docs/observabilidade.md).
-- [ ] **A9 · P1 · S — Middleware Traefik `RateLimit`** grosso/alto nas rotas da API (complementa o Bucket4j — `SECURITY.md` §11a) + headers de segurança.
+- [x] **A9 · P1 · S — Middleware Traefik `RateLimit`** grosso/alto nas rotas da API (complementa o Bucket4j — `SECURITY.md` §11a) + headers de segurança.
+  ✅ *Feito:* Middleware `ratelimit` (200 req/s por IP, burst 500) no Ingress da aplicação: camada grossa, antes dos pods; a fina continua na API (60/min, alimenta o painel de Ameaças). Verificado: rajada de 1.500 GET / → 165 × `429` do Traefik (texto, não o JSON da API); a cena de cliques da demo (120 req/s) passou inteira, 4.800 × `302`. Achado no caminho: o patch do overlay local **substituía** as anotações do Ingress em vez de adicionar uma.
 - [x] **A10 · P0 · M — Overlays:**
   - `local`: StorageClass `local-path`, host `l2.localhost`, TLS self-signed, réplicas baixas;
   - `oracle`: StorageClass da VM/OCI, host público, Let's Encrypt, `SESSION_COOKIE_SECURE=true`;
