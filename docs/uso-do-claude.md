@@ -55,6 +55,7 @@ humana pegaram falhas que o código gerado escondia**.
 | Service graph do Tempo vazio | Painel "Mapa de serviços" sem dado | Li o chart: os processadores ficam em `overrides.defaults.metrics_generator` |
 | Painel "cliques humanos" | Sob carga marcou 0: o `curl` é classificado como bot pelo User-Agent | Painel conta todas as viagens; a divisão bot/humano fica no gráfico ao lado |
 | G1 marcada como feita | O usuário perguntou se as Gs estavam prontas; a `main` não existia | Status corrigido para parcial |
+| `demo-load.sh` lendo o `code` do link com `grep '"code":"'` | Contra um servidor falso (JSON com espaço depois do `:`) o setup saiu com código 1 e sem mensagem: o `grep` sem match derrubou o script pelo `pipefail` | Regex tolerante a espaço e `\|\| true`, para o erro cair no `die` com a resposta da API |
 
 ## Decisões que o Claude propôs e a equipe aceitou ou mudou
 
@@ -64,6 +65,12 @@ humana pegaram falhas que o código gerado escondia**.
 - **Janela de 60 s no scale-up do HPA**: o boot da JVM (Spring + Flyway) gerava scale-up em cascata.
 - **Limite de viagens alto só no overlay `local`** (`APP_RATELIMIT_TRAVEL_CAPACITY`): o padrão de 60/min
   por IP trava o loop de cliques antes de gerar CPU para o HPA. Login e cadastro ficam no padrão.
+- **Rajada de login repetida a cada 61 s no `demo-load.sh ameaca`**: lido no `RateLimiter` do
+  portal-app, só a primeira recusa de cada janela (1 min) por rota + IP + pod vira evento e incrementa
+  `l2_threats_blocked_total{reason="RATE_LIMIT"}`. Uma rajada só, por maior que seja, soma 1 por pod.
+  O tamanho padrão (240 logins, 20 em paralelo) esvazia o balde de 60 mesmo com 3 réplicas.
+- **User-Agent de navegador no loop de cliques**: com `curl` toda viagem conta como bot e a curva de
+  cliques humanos fica zerada. O padrão é um Chrome; `--user-agent` mostra a curva de bots.
 
 ## Próximas entradas
 
