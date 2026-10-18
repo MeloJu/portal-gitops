@@ -46,6 +46,7 @@ spec:
         app.kubernetes.io/name: tools-api
         app.kubernetes.io/part-of: l2
     spec:
+      serviceAccountName: tools-api
       automountServiceAccountToken: false
       securityContext:
         # uid 1001 = `pwuser` da imagem do Playwright. Precisa ser numérico: com `runAsNonRoot`

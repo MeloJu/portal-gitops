@@ -1,0 +1,15 @@
+# Numa manutenção (drain de nó, upgrade) no máximo uma réplica da API sai por vez.
+# `maxUnavailable` e não `minAvailable: 1`: com uma réplica só (overlay local), `minAvailable: 1` travaria
+# qualquer drain para sempre. O Postgres não tem PDB: é uma réplica com volume RWO, um drain precisa movê-lo.
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: l2-api
+  labels:
+    app.kubernetes.io/name: l2-api
+    app.kubernetes.io/part-of: l2
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: l2-api

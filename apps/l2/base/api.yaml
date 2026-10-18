@@ -43,6 +43,7 @@ spec:
         app.kubernetes.io/name: l2-api
         app.kubernetes.io/part-of: l2
     spec:
+      serviceAccountName: l2-api
       automountServiceAccountToken: false
       securityContext:
         runAsNonRoot: true
