@@ -11,7 +11,7 @@ spec:
   project: default
   source:
     repoURL: https://github.com/MeloJu/portal-gitops.git
-    targetRevision: develop
+    targetRevision: main
     path: bootstrap/apps/azure
   destination:
     server: https://kubernetes.default.svc
