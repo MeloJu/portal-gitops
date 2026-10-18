@@ -469,7 +469,7 @@ O plano estudantil da Azure virou o ambiente "nuvem". Em vez do Oracle, a VM fic
 | # | Task | Estado | Observação |
 | --- | --- | --- | --- |
 | AZ1 | Terraform da VM (T1–T4, C4) | ✅ `apply` real: 10 criados, nó K3s `Ready` | `terraform/README.md` |
-| AZ2 | Overlay `azure` do ArgoCD + `ClusterIssuer` Let's Encrypt | ◐ escrito e renderiza; **falta provar no cluster** | `apps/l2/overlays/azure`, `bootstrap/apps/azure`, `platform/*-azure`; host = o `fqdn`; `SESSION_COOKIE_SECURE=true`; Grafana sem Ingress (túnel) |
-| AZ3 | `scripts/bootstrap-azure.sh` (ArgoCD + app-of-apps na VM) | ◐ escrito; **falta rodar** | túnel SSH + kubeconfig próprio (não mexe no `~/.kube/config`); atalhos em `scripts/azure.sh`; guia em `docs/azure.md` |
-| AZ4 | SealedSecret do `l2-secrets` + backup da chave | ⏳ | primeiro uso real do Sealed Secrets (`docs/sealed-secrets.md`) |
-| AZ5 | Primeiro `apply` + smoke contra o IP público | ⏳ | o que prova de verdade o AZ1 |
+| AZ2 | Overlay `azure` do ArgoCD + `ClusterIssuer` Let's Encrypt | ✅ certificado `l2-tls` **Ready**, HTTPS confiável (sem `-k`) | `apps/l2/overlays/azure`, `bootstrap/apps/azure`, `platform/*-azure`; Grafana sem Ingress (túnel). Achado na VM real: o `default-deny` bloqueava o desafio HTTP-01 (502); corrigido com `allow-acme-solver` (PR #39) |
+| AZ3 | `scripts/bootstrap-azure.sh` (ArgoCD + app-of-apps na VM) | ✅ rodado na VM: **12 Applications `Synced/Healthy`** | túnel SSH + kubeconfig próprio (não mexe no `~/.kube/config`); atalhos em `scripts/azure.sh`; guia em `docs/azure.md` |
+| AZ4 | SealedSecret do `l2-secrets` + backup da chave | ✅ o controller da VM abriu o SealedSecret (Secret com 3 chaves); backup da chave feito **fora do Git** | primeiro uso real do Sealed Secrets (`docs/sealed-secrets.md`). `gitleaks` ajustado só para o arquivo cifrado |
+| AZ5 | Primeiro `apply` + smoke contra o IP público | ✅ `tests/smoke.sh` **OK (13 verificações)** contra o cluster da VM; `https://<fqdn>` 200, `/tools/unshorten` 200, Actuator não exposto | **Falta:** `VT_API_KEY` no `l2-secrets` do Azure (hoje `/tools/scan` responde `SCAN_NOT_CONFIGURED`) |
