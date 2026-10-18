@@ -57,6 +57,11 @@ spec:
             # ("host not found in upstream"). Basta o Service existir; o pod da tools-api pode estar fora.
             - name: TOOLS_API_URL
               value: http://tools-api:3001
+            # O nginx também repassa /api/ e /r/ para a API (mesmo papel do proxy do Vite). No
+            # cluster o Ingress já manda essas rotas direto para a l2-api, mas o nginx resolve o nome
+            # na partida: o padrão da imagem (`http://backend:8080`) não existe aqui e o pod não sobe.
+            - name: API_URL
+              value: http://l2-api:8080
           resources:
             requests:
               cpu: 25m
