@@ -20,7 +20,7 @@ output "kubectl_tunnel" {
 
 output "kubeconfig_comando" {
   description = "Copia o kubeconfig do K3s da VM (aponta para 127.0.0.1:6443, que o túnel acima atende)."
-  value       = "ssh ${var.admin_username}@${local.fqdn} 'sudo cat /etc/rancher/k3s/k3s.yaml' > kubeconfig-azure.yaml"
+  value       = "(umask 077; ssh ${var.admin_username}@${local.fqdn} 'sudo cat /etc/rancher/k3s/k3s.yaml' > kubeconfig-azure.yaml)"
 }
 
 output "parar_vm" {

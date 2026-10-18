@@ -49,6 +49,7 @@ resource "azurerm_public_ip" "this" {
 }
 
 resource "azurerm_network_security_group" "this" {
+  #checkov:skip=CKV_AZURE_160:porta 80 aberta de propósito: desafio HTTP-01 do Let's Encrypt e redirect para HTTPS
   name                = "${var.name_prefix}-nsg"
   location            = azurerm_resource_group.this.location
   resource_group_name = azurerm_resource_group.this.name
@@ -104,6 +105,7 @@ resource "azurerm_network_security_group" "this" {
 #trivy:ignore:AZU-0076
 #trivy:ignore:AZU-0068
 resource "azurerm_network_interface" "this" {
+  #checkov:skip=CKV_AZURE_119:VM única sem balanceador na frente; o NSG da sub-rede limita o que chega
   name                = "${var.name_prefix}-nic"
   location            = azurerm_resource_group.this.location
   resource_group_name = azurerm_resource_group.this.name
@@ -128,6 +130,7 @@ resource "azurerm_subnet_network_security_group_association" "this" {
 }
 
 resource "azurerm_linux_virtual_machine" "this" {
+  #checkov:skip=CKV_AZURE_50:extensões necessárias para o `az vm user update` (recuperar o acesso SSH)
   name                = "${var.name_prefix}-vm"
   location            = azurerm_resource_group.this.location
   resource_group_name = azurerm_resource_group.this.name
@@ -156,6 +159,9 @@ resource "azurerm_linux_virtual_machine" "this" {
     sku       = "server"
     version   = "latest"
   }
+
+  # Storage gerenciado pela Azure: dá acesso ao log serial/console se o cloud-init falhar e o SSH não subir.
+  boot_diagnostics {}
 
   custom_data = base64encode(templatefile("${path.module}/cloud-init.yaml.tftpl", {
     k3s_version = var.k3s_version

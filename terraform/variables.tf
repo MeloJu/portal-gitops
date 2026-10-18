@@ -42,14 +42,17 @@ variable "ssh_public_key" {
 
 variable "ssh_allowed_cidr" {
   description = <<-EOT
-    De onde o SSH (porta 22) é aceito, em CIDR. SEM valor padrão de propósito: a porta 22 aberta ao mundo
-    leva milhares de tentativas por dia. Use o seu IP, no formato IP/32.
+    De onde o SSH (porta 22) é aceito, em CIDR IPv4. SEM valor padrão de propósito: a porta 22 aberta ao mundo
+    leva milhares de tentativas por dia. Use o seu IP, no formato IP/32. Lista de aceitos: só /24 a /32.
   EOT
   type        = string
 
   validation {
-    condition     = can(cidrhost(var.ssh_allowed_cidr, 0)) && var.ssh_allowed_cidr != "0.0.0.0/0"
-    error_message = "Informe um CIDR válido e diferente de 0.0.0.0/0 (ex.: 203.0.113.7/32)."
+    condition = (
+      can(regex("^([0-9]{1,3}\\.){3}[0-9]{1,3}/(2[4-9]|3[0-2])$", var.ssh_allowed_cidr)) &&
+      can(cidrnetmask(var.ssh_allowed_cidr))
+    )
+    error_message = "Informe um CIDR IPv4 de /24 a /32 (ex.: 203.0.113.7/32). Redes maiores, 0.0.0.0/0 e IPv6 são recusados."
   }
 }
 

@@ -1,6 +1,9 @@
 #cloud-config
 # Roda uma vez, no primeiro boot da VM: instala o K3s com a mesma versão do k3d local.
 package_update: true
+# Só chave SSH, e login direto como root desligado (reforça disable_password_authentication da VM).
+ssh_pwauth: false
+disable_root: true
 packages:
   - curl
   - ca-certificates
@@ -20,5 +23,8 @@ write_files:
 runcmd:
   # Versão fixada: sem isso o instalador pegaria a mais nova e o ambiente divergiria do local.
   # Traefik, metrics-server e local-path vêm no K3s e são o que o projeto já usa no k3d.
-  - curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION="${k3s_version}" sh -s - server
+  # O install.sh vem da TAG do repositório (o "+" da versão vira %2B na URL) e é gravado em arquivo antes de
+  # executar, em vez de `curl | sh`: um download cortado no meio não roda pela metade.
+  - curl -sfL -o /tmp/k3s-install.sh "https://raw.githubusercontent.com/k3s-io/k3s/${replace(k3s_version, "+", "%2B")}/install.sh"
+  - INSTALL_K3S_VERSION="${k3s_version}" sh /tmp/k3s-install.sh server
   - systemctl enable --now k3s

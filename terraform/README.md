@@ -50,7 +50,7 @@ az account show --query id -o tsv          # o subscription_id
 
 cd terraform
 cp terraform.tfvars.example terraform.tfvars   # NÃO entra no Git; preencha os 4 valores
-curl -s https://api.ipify.org                  # o seu IP, para ssh_allowed_cidr = "<ip>/32"
+curl -s https://api.ipify.org                  # o seu IP, para ssh_allowed_cidr = "<ip>/32" (mínimo aceito: /24; recomendado: /32)
 
 terraform init
 terraform plan -out=tfplan                     # leia: deve criar ~11 recursos, nenhum "destroy"
@@ -97,7 +97,7 @@ VM**, então também some.
 
 ## Decisões de segurança
 
-- **SSH sem valor padrão:** `ssh_allowed_cidr` é obrigatório e **recusa `0.0.0.0/0`** (a validação falha no `plan`).
+- **SSH sem valor padrão:** `ssh_allowed_cidr` é obrigatório e só aceita **IPv4 de /24 a /32** (recomendado: `/32`, o seu IP). `0.0.0.0/0`, redes maiores, IPv6 e texto que não é CIDR falham no `plan`; `terraform test` cobre os casos.
 - **NSG antes da VM:** a NIC depende explicitamente da associação do NSG à sub-rede. Sem isso o Terraform podia
   criar a VM (com IP público) alguns segundos antes de o firewall existir.
 - **Sem senha:** `disable_password_authentication = true`.
