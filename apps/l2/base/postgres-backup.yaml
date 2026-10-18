@@ -71,6 +71,15 @@ spec:
                 - |
                   set -eu
                   export PGPASSWORD="$(cat /run/secrets/l2/app-password)"
+                  # Pod novo sob NetworkPolicy: o kube-router leva alguns segundos para liberar o IP dele, e
+                  # uma conexão imediata leva "Connection refused". Retry do Job não ajuda (cada um é um pod
+                  # novo, na mesma corrida); esperar o banco aceitar a conexão resolve.
+                  ok=""
+                  for i in $(seq 1 30); do
+                    if pg_isready -h postgres -U l2_app -d l2 -t 2 > /dev/null; then ok=1; break; fi
+                    sleep 2
+                  done
+                  [ -n "$ok" ] || { echo "Postgres não respondeu em 60 s"; exit 1; }
                   file="/backup/l2-$(date -u +%Y%m%dT%H%M%SZ).dump"
                   pg_dump -h postgres -U l2_app -d l2 --format=custom --file="${file}.tmp"
                   pg_restore --list "${file}.tmp" > /dev/null
