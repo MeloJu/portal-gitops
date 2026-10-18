@@ -38,6 +38,16 @@ patches:
         name: l2
   # O kind não tem o Prometheus Operator (nem o CRD ServiceMonitor), e sem Collector o agente OTel
   # só geraria erro de exportação no log.
+  # Sem Traefik no kind: o CRD Middleware não existe lá.
+  - target:
+      kind: Middleware
+      name: ratelimit
+    patch: |-
+      $patch: delete
+      apiVersion: traefik.io/v1alpha1
+      kind: Middleware
+      metadata:
+        name: ratelimit
   - target:
       kind: ServiceMonitor
       name: l2-api
