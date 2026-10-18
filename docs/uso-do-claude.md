@@ -34,6 +34,8 @@ para o critério de uso do copiloto. É atualizado junto com o trabalho, não no
 | 16 | "sim, continue" (span do browser) | OTel JS no frontend (portal-app #71 e #72), validado num Chromium headless real; `scripts/check-browser-trace.sh` |
 | 17 | "consegue me ajudar a ver alguma máquina da Azure pra subir esse projeto? eu tenho o plano estudantil" e "consegue fazer o terraform pra essa que você recomendou?" | Dimensionamento a partir do consumo **medido** no cluster local (4,1 GB de RAM, 0,9 vCPU) → `Standard_B2ms`; Terraform da VM com K3s, validado sem criar nada na conta (`terraform/`) |
 | 18 | "instala o Azure CLI e também pode fazer essas coisas aí, só me fala onde colocar as credenciais" | CLI instalada; login feito **por você** no navegador (nenhuma credencial passou por mim); consulta das regras da assinatura; registro dos provedores; chave SSH, `terraform.tfvars` ignorado pelo Git e `terraform plan` real |
+| 19 | "pode dar o apply, depois me ensina a rodar o projeto" e "pode fazer essas coisas e ensina a ver na nuvem" | `terraform apply` real (10 recursos, K3s `Ready`); overlay, app-of-apps, Let's Encrypt e scripts de acesso por túnel SSH (PRs #37 a #39); SealedSecret do primeiro uso real; smoke test completo contra a VM |
+| 20 | "tem o .env na pasta do desafio3, precisa subir isso?" e "testa se a API do VirusTotal está funcionando" | O Claude listou **só os nomes** das variáveis (sem os valores) e concluiu que o `.env` nunca vai para o Git; o que faltava era a `VT_API_KEY` no cluster. Selá-la para a nuvem foi **bloqueado pelo modo automático** (origem sensível) e ficou como decisão do usuário |
 
 ## O que o Claude errou (e como foi pego)
 
@@ -42,6 +44,10 @@ humana pegaram falhas que o código gerado escondia**.
 
 | Erro | Como apareceu | Correção |
 | --- | --- | --- |
+| `wait_api` com `kubectl get --raw /readyz` | O primeiro `bootstrap-azure.sh` real falhou com "API não respondeu" **com o túnel funcionando**: o Git Bash do Windows converte `/readyz` num caminho do disco | Trocado por `kubectl get nodes`, com o motivo num comentário |
+| Overlay `azure` sem NetworkPolicy para o desafio do Let's Encrypt | Na VM real, o certificado ficou `False` com `wrong status code '502'`: o `default-deny` do namespace impedia o Traefik de falar com o pod do HTTP-01. No local o emissor é self-signed e o problema nunca existiu | `allow-acme-solver`: só Traefik, só a porta 8089, só o pod com o label do solver (PR #39) |
+| SealedSecret barrado pelo gitleaks | O texto cifrado virou "generic-api-key" e o check ficou vermelho | Allowlist **só** para `overlays/*/sealed-secret.yaml`; o job de Secret em claro continua barrando `kind: Secret` |
+| Sincronização do ArgoCD presa a uma versão antiga | O `l2-azure` esperava um PVC (`WaitForFirstConsumer`) de uma operação iniciada **antes** do SealedSecret existir, e ignorava o commit novo | Operação encerrada (`operation: null`) e novo sync; registrado em `docs/azure.md` |
 | Paths do Ingress como `/r` e `/api` | Teste ao vivo: `GET /rocket` caiu na API (401). O Traefik trata `Prefix` como prefixo de **texto**, ao contrário da spec do Kubernetes | Paths com barra final (`/r/`, `/api/`), com o motivo no comentário do manifest |
 | Primeira correção feita com `kubectl patch` | O ArgoCD (`selfHeal`) **reverteu** o patch em segundos, e o teste foi inválido | Correção só pelo Git, que é a regra do GitOps |
 | Nome de métrica `l2_links_created_total` no plano | Conferido em `/actuator/prometheus`: é `l2_links_total` | Plano corrigido |

@@ -102,11 +102,28 @@ O bump automático do pipeline edita só o overlay `local`. O overlay `azure` te
 `images:`, atualizado à mão (copiando do `local`) depois que a versão provou-se lá: é o embrião do
 gate de promoção (task D5). O ArgoCD da VM segue a `develop`.
 
+## Chave do VirusTotal (opcional)
+
+A tools-api só faz a análise de segurança de links (`POST /tools/scan`) se o `l2-secrets` tiver
+`VT_API_KEY`; sem ela responde `503 SCAN_NOT_CONFIGURED` e o resto funciona. Para acrescentar a
+chave **sem trocar as outras senhas** (resselar tudo quebraria o Postgres, que já nasceu com elas),
+use `--merge-into`, com o túnel aberto (`./scripts/azure.sh kubectl`) e o `KUBECONFIG` exportado:
+
+```bash
+kubectl create secret generic l2-secrets -n l2 --from-literal=VT_API_KEY="<a chave>" \
+  --dry-run=client -o yaml \
+  | kubeseal --controller-name sealed-secrets-controller --controller-namespace kube-system \
+      --format yaml --merge-into apps/l2/overlays/azure/sealed-secret.yaml
+```
+
+Depois é um PR normal. A chave real fica só no seu `.env` e no cluster (cifrada no Git).
+
 ## Problemas comuns
 
 | Sintoma | Causa provável | O que fazer |
 | --- | --- | --- |
 | `A API do cluster não respondeu pelo túnel` | VM desligada, ou o seu IP mudou | `az vm start ...`; atualize `ssh_allowed_cidr` e rode `terraform apply` |
 | API/Postgres em `CreateContainerConfigError` | falta o SealedSecret | passo "Segredos" |
-| Certificado `False` / navegador avisa | o desafio HTTP-01 ainda não passou (leva ~1 min) | `kubectl -n l2 describe certificate l2-tls` e `kubectl get challenges -A` |
+| Certificado `False` / navegador avisa | o desafio HTTP-01 ainda não passou (leva ~1 min). Se a razão for `wrong status code '502'`, o Traefik não alcança o pod do desafio: confira a NetworkPolicy `allow-acme-solver` | `kubectl -n l2 describe certificate l2-tls` e `kubectl get challenges -A` |
+| `l2-azure` fica `OutOfSync` esperando um PVC, mesmo depois de um commit novo | a operação de sync foi iniciada com uma versão antiga e não troca de commit sozinha | `kubectl -n argocd patch application l2-azure --type merge -p '{"operation":null}'` (só encerra a operação; o auto-sync recomeça) |
 | `bind: Only one usage of each socket` | porta local ocupada (o túnel anterior ainda vive) | feche o outro terminal, ou `LOCAL_PORT=6444 ./scripts/azure.sh kubectl` |
