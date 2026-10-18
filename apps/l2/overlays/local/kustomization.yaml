@@ -12,11 +12,11 @@ resources:
 # constrói as imagens de um checkout local do portal-app com essa tag.
 images:
   - name: ghcr.io/meloju/portal-app-backend
-    newTag: sha-daf8aaf
+    newTag: sha-e02c39b
   - name: ghcr.io/meloju/portal-app-frontend
-    newTag: sha-daf8aaf
+    newTag: sha-e02c39b
   - name: ghcr.io/meloju/portal-app-tools-api
-    newTag: sha-daf8aaf
+    newTag: sha-e02c39b
 configMapGenerator:
   - name: l2-config
     behavior: merge
