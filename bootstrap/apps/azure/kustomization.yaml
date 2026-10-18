@@ -12,6 +12,16 @@ resources:
   - l2.yaml
 
 patches:
+  # O Azure segue a `main` (produção), não a `develop`. As Applications da plataforma são
+  # compartilhadas com o local e apontam para a `develop`; aqui só as que leem ESTE repositório
+  # mudam (as de Helm leem a versão do chart, que não depende de branch).
+  - target:
+      kind: Application
+      name: "(cert-manager-issuers|observability-dashboards|observability-monitors|observability-otlp|traefik-config)"
+    patch: |-
+      - op: replace
+        path: /spec/source/targetRevision
+        value: main
   # Let's Encrypt no lugar do self-signed.
   - target:
       kind: Application
@@ -28,11 +38,32 @@ patches:
       - op: replace
         path: /spec/source/path
         value: platform/observability/otlp-azure
-  # O Grafana NÃO fica na internet: o acesso é por túnel SSH + port-forward (docs/azure.md).
+  # Grafana no navegador: https://<fqdn>/grafana/ (mesmo host e mesmo certificado da aplicação).
+  # Exposição AUTORIZADA pelo dono do projeto. Exige login (senha aleatória do Secret `grafana-admin`,
+  # fora do Git; o Grafana bloqueia o usuário depois de tentativas erradas). O path termina em "/"
+  # (o Traefik trata Prefix como prefixo de texto) e o Grafana precisa saber que mora num subcaminho.
+  # ArgoCD, Prometheus e Tempo continuam SEM Ingress: só por túnel SSH (docs/azure.md).
+  # Para voltar a fechar: `grafana/ingress/enabled` = false.
   - target:
       kind: Application
       name: kube-prometheus-stack
     patch: |-
       - op: replace
-        path: /spec/source/helm/valuesObject/grafana/ingress/enabled
-        value: false
+        path: /spec/source/helm/valuesObject/grafana/ingress/hosts
+        value:
+          - l2-mk6a4.brazilsouth.cloudapp.azure.com
+      - op: replace
+        path: /spec/source/helm/valuesObject/grafana/ingress/path
+        value: /grafana/
+      # Sem secretName: o Traefik usa o certificado do host (l2-tls), emitido para a aplicação.
+      - op: add
+        path: /spec/source/helm/valuesObject/grafana/ingress/tls
+        value:
+          - hosts:
+              - l2-mk6a4.brazilsouth.cloudapp.azure.com
+      - op: add
+        path: /spec/source/helm/valuesObject/grafana/grafana.ini
+        value:
+          server:
+            root_url: https://l2-mk6a4.brazilsouth.cloudapp.azure.com/grafana/
+            serve_from_sub_path: true
