@@ -97,10 +97,26 @@ p99 40 ms, CPU da API 0,47 core, 0 erros 5xx.
 - **Contadores zeram no deploy.** `l2_links_total` é em memória; por isso o painel usa `increase` no
   período, não o total.
 
+## Rota pública `/otlp` (entrada de spans do browser)
+
+O browser (OTel JS, task X4) envia spans por **`POST /otlp/v1/traces`, na mesma origem do app**, então não há CORS.
+Como é um endpoint de **escrita aberto à internet**, tem camadas:
+
+| Camada | O que faz | Verificado |
+| --- | --- | --- |
+| Rota `Exact` `/otlp/v1/traces` | só traces; `/otlp/v1/logs` e `/metrics` nem chegam ao Collector (caem no nginx, `405`) | `405` |
+| Middleware `otlp-limit` | 20 req/s por IP, burst 50 | rajada de 150: 83 × `200`, 66 × `429`; volta a aceitar depois |
+| Middleware `otlp-body` | corpo até 1 MiB | 2 MiB → `413` |
+| Receiver **separado** (`otlp/browser`, porta 4319) | só o tráfego público passa por ele | — |
+| Processor `resource/browser` | **sobrescreve** `service.name=l2-frontend` e `telemetry.source=browser` | enviei `service.name=l2-api`; o Tempo guardou `l2-frontend` |
+| Chart enxuto | jaeger, zipkin, prometheus e métricas/logs OTLP desligados | o Service do Collector expõe só 4317, 4318 e 4319 |
+
+Funciona em HTTP e em HTTPS (dois Ingress, porque o Traefik só casa HTTPS num router com TLS).
+
 ## Ainda não feito
 
-- **Span do browser** (`/otlp` no Ingress + OTel JS no `portal-app`): hoje o trace começa no Traefik.
-- **Métricas do Traefik** e **do Postgres** (`postgres_exporter`).
+- **Span do browser**: a rota `/otlp` já existe; falta o OTel JS no `portal-app` (X4) para o trace começar no navegador.
+- **Métricas do Postgres** (`postgres_exporter`).
 - **Exemplars** (pular de um ponto do gráfico para o trace): o agente OTel não alimenta os exemplars do
   Micrometer; fica para depois.
 - **Alertas.**

@@ -1,0 +1,51 @@
+# Rota pública para o browser enviar spans: SÓ POST /otlp/v1/traces, mesma origem do app (sem CORS).
+# Aponta para um receiver SEPARADO do Collector (4319), cujo pipeline força service.name=l2-frontend,
+# para um cliente não conseguir se passar pela API. /otlp/v1/logs e /metrics não existem (caem no SPA).
+#
+# Dois Ingress porque o Traefik só casa HTTPS num router com TLS e HTTP num router sem TLS.
+# Ficam no namespace observability porque um Ingress só enxerga Services do próprio namespace.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: otlp
+  namespace: observability
+  annotations:
+    traefik.ingress.kubernetes.io/router.middlewares: observability-otlp-limit@kubernetescrd,observability-otlp-body@kubernetescrd,observability-otlp-strip@kubernetescrd
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: l2.localhost
+      http:
+        paths:
+          - path: /otlp/v1/traces
+            pathType: Exact
+            backend:
+              service:
+                name: otel-collector
+                port:
+                  number: 4319
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: otlp-tls
+  namespace: observability
+  annotations:
+    traefik.ingress.kubernetes.io/router.middlewares: observability-otlp-limit@kubernetescrd,observability-otlp-body@kubernetescrd,observability-otlp-strip@kubernetescrd
+spec:
+  ingressClassName: traefik
+  # Sem secretName: o Traefik usa o certificado do host (l2-tls) que já está no repositório de TLS.
+  tls:
+    - hosts:
+        - l2.localhost
+  rules:
+    - host: l2.localhost
+      http:
+        paths:
+          - path: /otlp/v1/traces
+            pathType: Exact
+            backend:
+              service:
+                name: otel-collector
+                port:
+                  number: 4319
