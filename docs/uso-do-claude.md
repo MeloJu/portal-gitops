@@ -29,6 +29,7 @@ para o critério de uso do copiloto. É atualizado junto com o trabalho, não no
 | 11 | "não vai ter oracle por enquanto, pensa como se fosse local, mas pode continuar" | Escopo reduzido ao cluster local: P3 só com self-signed, Let's Encrypt adiado; P4 e P6 feitas |
 | 12 | "corrige o que tá errado primeiro, depois vai para observabilidade" | PR #5 com o status real das tasks; depois a observabilidade completa (PR desta etapa) |
 | 13 | "vai fazendo, vai fazendo" (depois de conferir os PRs do André e o #69 do portal-app) | Merge do #69 (CD) e dos #8, #9 e #10 do André, resolvendo o conflito de `uso-do-claude.md`; validação no cluster do O4 e do Q5; marcação das tasks |
+| 14 | "foi, pode ir" / "pode fazer os merge você mesmo" | Re-execução do bump, PR #70 só de documentação para gerar um commit novo, e validação do primeiro deploy 100% automático (portal-app #70 → gitops #13 → ArgoCD) |
 
 ## O que o Claude errou (e como foi pego)
 
@@ -57,6 +58,7 @@ humana pegaram falhas que o código gerado escondia**.
 | Painel "cliques humanos" | Sob carga marcou 0: o `curl` é classificado como bot pelo User-Agent | Painel conta todas as viagens; a divisão bot/humano fica no gráfico ao lado |
 | Token do bump (`GITOPS_TOKEN`) sem escrita | O primeiro bump automático falhou no `git push`: `403 Permission denied`. O checkout do `portal-gitops` passou porque o repositório é público, então o job parecia saudável até o push. As imagens já tinham sido publicadas | Marquei X2/D1/D2 como parciais (não como feitas) e pedi ao dono do token para conferir *Contents* e *Pull requests* em *Read and write* |
 | Conflito de `uso-do-claude.md` entre PRs paralelos | Três PRs do André editando a mesma tabela: o primeiro entra limpo, os outros dois conflitam | Merge da `develop` nas branches, mantendo as linhas dos dois lados, e comentário em cada PR avisando o que foi mexido na branch dele |
+| "Sucesso" do job de bump que não provava nada | Ao re-executar depois do bump manual, o job passou sem abrir PR ("nada a propor"): as tags já eram as mesmas. Quase marquei X2 como feito por isso | Gerei um commit novo na `develop` (PR #70, só README) para exercitar de verdade a criação do PR, e só então marquei |
 | G1 marcada como feita | O usuário perguntou se as Gs estavam prontas; a `main` não existia | Status corrigido para parcial |
 | `demo-load.sh` lendo o `code` do link com `grep '"code":"'` | Contra um servidor falso (JSON com espaço depois do `:`) o setup saiu com código 1 e sem mensagem: o `grep` sem match derrubou o script pelo `pipefail` | Regex tolerante a espaço e `\|\| true`, para o erro cair no `die` com a resposta da API |
 | Critério do O7 "deletar um pod faz o contador de reinícios subir" | Testado no k3d: depois do `kubectl delete pod`, `kube_pod_container_status_restarts_total` ficou em 0 (o pod novo nasce com `restartCount` 0); só subiu com `kill 1` no container | Painel "Reinícios" com dois números: containers reiniciados (crash/OOM/liveness) e pods recriados (delete, rollout, HPA) |
