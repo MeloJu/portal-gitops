@@ -39,7 +39,8 @@ jobs:
                 { echo "::error::PR para main só vem de develop, release/* ou hotfix/* (veio de '$HEAD')"; exit 1; }
               ;;
             develop)
-              [[ "$HEAD" == "main" || "$HEAD" =~ ^(feature|fix|chore|docs|refactor|release|hotfix)/ ]] ||
+              # dependabot/*: branches que o próprio Dependabot cria (.github/dependabot.yml)
+              [[ "$HEAD" == "main" || "$HEAD" =~ ^(feature|fix|chore|docs|refactor|release|hotfix|dependabot)/ ]] ||
                 { echo "::error::branch '$HEAD' fora do padrão: use feature/*, fix/*, chore/*, docs/* ou refactor/*"; exit 1; }
               ;;
           esac

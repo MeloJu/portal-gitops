@@ -1,0 +1,20 @@
+# Atualizações automáticas das GitHub Actions (fixadas por SHA nos workflows). O Dependabot abre um PR por
+# semana, agrupado, e ele passa pelos mesmos checks obrigatórios de qualquer PR (inclusive o smoke e2e).
+#
+# Os charts Helm das Applications do ArgoCD (platform/*) não são suportados pelo Dependabot: são atualizados à
+# mão, com a versão fixada em `targetRevision` (cada atualização é um commit revisável).
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    target-branch: develop
+    groups:
+      actions:
+        patterns: ["*"]
+    commit-message:
+      prefix: "chore(deps)"
+    labels:
+      - dependencies
