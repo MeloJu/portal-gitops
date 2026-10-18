@@ -43,6 +43,8 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: postgres
+  annotations:
+    checkov.io/skip1: "CKV_K8S_40=uid 70 do usuario postgres da imagem alpine; o initdb exige um uid existente no /etc/passwd"
   labels:
     app.kubernetes.io/name: postgres
     app.kubernetes.io/part-of: l2

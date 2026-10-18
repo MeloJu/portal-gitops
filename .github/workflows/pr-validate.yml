@@ -99,6 +99,31 @@ jobs:
               "/in/$(basename "$f")"
           done
 
+  checkov:
+    name: Checkov (segurança dos manifests)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      # Analisa o que o ArgoCD realmente aplica (o overlay renderizado), não o YAML cru da base.
+      - name: Renderiza os overlays
+        run: |
+          mkdir -p rendered
+          for dir in apps/l2/overlays/*/; do
+            kubectl kustomize "$dir" > "rendered/$(basename "$dir").yaml"
+          done
+
+      # HARD-FAIL: pods privilegiados, root, sem limites, sem probes, etc. barram o PR.
+      # O que é inevitável por causa da imagem (uid fixo, tag em vez de digest, segredo por
+      # ambiente) está justificado em `checkov.io/skipN` no próprio manifesto, com o motivo.
+      # CKV2_K8S_6 (NetworkPolicy) fica como aviso até a task S2; remover a flag quando ela entrar.
+      - name: Checkov
+        run: |
+          docker run --rm -v "$PWD/rendered:/rl:ro" bridgecrew/checkov:3.2.500 \
+            -d /rl --framework kubernetes --compact --quiet \
+            --soft-fail-on CKV2_K8S_6
+
   yamllint:
     name: yamllint
     runs-on: ubuntu-latest

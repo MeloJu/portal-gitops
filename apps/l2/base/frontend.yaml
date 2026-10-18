@@ -19,6 +19,10 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: frontend
+  annotations:
+    checkov.io/skip1: "CKV_K8S_40=uid 101 do nginx-unprivileged; mudar exigiria reconstruir a imagem"
+    checkov.io/skip2: "CKV_K8S_43=imagem da aplicacao por tag sha-7 imutavel por commit; digest fica como evolucao (S4)"
+    checkov.io/skip3: "CKV_K8S_15=a tag e unica por commit, entao IfNotPresent e correto e evita pull a cada reinicio"
   labels:
     app.kubernetes.io/name: frontend
     app.kubernetes.io/part-of: l2
