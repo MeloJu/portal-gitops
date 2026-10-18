@@ -2,8 +2,11 @@ name: PR validate
 
 # Valida os manifests antes do merge. Os jobs são independentes: um vermelho não esconde o outro.
 on:
+  # Qualquer base (PRs empilhados também validam) e `edited`: quando o GitHub retarga um PR
+  # para develop depois do merge do PR de baixo, só o `edited` dispara. Sem ele os checks
+  # obrigatórios ficavam "Waiting for status" para sempre.
   pull_request:
-    branches: [main, develop]
+    types: [opened, synchronize, reopened, edited]
   push:
     branches: [main, develop]
 
