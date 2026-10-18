@@ -48,6 +48,7 @@ humana pegaram falhas que o código gerado escondia**.
 | Teste de rate limit com 65 `curl` em sequência | Nenhum `429`: o balde recarrega 1 token/s e cada `curl` levava mais de 1 s, então nunca esvaziava. Quase concluí que o Traefik estava errado | Li o filtro e o `RateLimiter`, vi o refill, e refiz com uma rajada de 120 numa conexão: 56 × `429` |
 | `printf` montando JSON do patch do ArgoCD | `
 ` virou quebra de linha real, o `kubectl patch` falhou e o loop de espera rodou 5 min à toa | Patch montado com Python e aplicado via `--patch-file` |
+| Gatilho do `pr-validate` só para base `main`/`develop` | O PR #4, retargetado para `develop` depois do merge do #3, ficou com os 4 checks obrigatórios em *Waiting for status* (o retarget dispara `edited`, que não estava na lista). O usuário achou que os testes tinham quebrado | Workflow passa a rodar em qualquer base e no evento `edited`; o #4 rodou e ficou verde |
 | G1 marcada como feita | O usuário perguntou se as Gs estavam prontas; a `main` não existia | Status corrigido para parcial |
 
 ## Decisões que o Claude propôs e a equipe aceitou ou mudou
