@@ -1,0 +1,247 @@
+# Segmentação de rede do namespace l2: NADA entra nem sai, exceto o que está liberado abaixo.
+# O K3s aplica NetworkPolicy (kube-router). No kind do CI (kindnet) elas são só declarativas.
+#
+#   internet ─▶ Traefik ─▶ frontend :8080 ─▶ tools-api :3001 ─▶ internet (só IP público, 80/443)
+#                    └───▶ l2-api   :8080 ─▶ postgres  :5432
+#   Prometheus ─▶ l2-api :8081          l2-api ─▶ otel-collector :4318
+#
+# Todo pod também pode resolver DNS (CoreDNS no kube-system).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny
+  labels:
+    app.kubernetes.io/part-of: l2
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+    - Egress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-dns
+  labels:
+    app.kubernetes.io/part-of: l2
+spec:
+  podSelector: {}
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+---
+# Postgres: só a API e o backup entram na porta do banco; o Prometheus, na do exporter. Ele não sai para lugar nenhum.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: postgres
+  labels:
+    app.kubernetes.io/name: postgres
+    app.kubernetes.io/part-of: l2
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: postgres
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: l2-api
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: postgres-backup
+      ports:
+        - protocol: TCP
+          port: 5432
+    # O Prometheus lê as métricas do sidecar postgres-exporter.
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: observability
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: prometheus
+      ports:
+        - protocol: TCP
+          port: 9187
+---
+# l2-api: a 8080 recebe o Traefik (rotas /api/ e /r/) e o nginx do frontend (o proxy /api/ dele);
+# a 8081 (Actuator) só o Prometheus. Sai para o Postgres e para o Collector (traces).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: l2-api
+  labels:
+    app.kubernetes.io/name: l2-api
+    app.kubernetes.io/part-of: l2
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: l2-api
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: traefik
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: frontend
+      ports:
+        - protocol: TCP
+          port: 8080
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: observability
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: prometheus
+      ports:
+        - protocol: TCP
+          port: 8081
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: postgres
+      ports:
+        - protocol: TCP
+          port: 5432
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: observability
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: opentelemetry-collector
+      ports:
+        - protocol: TCP
+          port: 4318
+---
+# frontend: só o Traefik entra. Sai para a tools-api (/tools/) e para a API (proxy /api/ do nginx).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: frontend
+  labels:
+    app.kubernetes.io/name: frontend
+    app.kubernetes.io/part-of: l2
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: frontend
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: traefik
+      ports:
+        - protocol: TCP
+          port: 8080
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: tools-api
+      ports:
+        - protocol: TCP
+          port: 3001
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: l2-api
+      ports:
+        - protocol: TCP
+          port: 8080
+---
+# tools-api: o componente mais exposto, porque resolve URLs que o USUÁRIO escolhe (unshorten).
+# Defesa em profundidade contra SSRF, além da validação da própria app: sai só para IP PÚBLICO em
+# 80/443. Rede interna do cluster, dos nós, metadados de nuvem (169.254.169.254) e loopback ficam fora.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: tools-api
+  labels:
+    app.kubernetes.io/name: tools-api
+    app.kubernetes.io/part-of: l2
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: tools-api
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: frontend
+      ports:
+        - protocol: TCP
+          port: 3001
+  egress:
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+              - 169.254.0.0/16
+              - 100.64.0.0/10
+              - 127.0.0.0/8
+      ports:
+        - protocol: TCP
+          port: 80
+        - protocol: TCP
+          port: 443
+---
+# Backup: só sai para o Postgres (e o DNS, pela allow-dns). Ninguém entra.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: postgres-backup
+  labels:
+    app.kubernetes.io/name: postgres-backup
+    app.kubernetes.io/part-of: l2
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: postgres-backup
+  policyTypes:
+    - Ingress
+    - Egress
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: postgres
+      ports:
+        - protocol: TCP
+          port: 5432

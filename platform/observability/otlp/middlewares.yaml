@@ -1,0 +1,32 @@
+# Cadeia de proteção da rota pública /otlp (endpoint de ESCRITA aberto à internet).
+# Ordem de execução no Ingress: limite de taxa -> limite de corpo -> remove o prefixo.
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: otlp-limit
+  namespace: observability
+spec:
+  rateLimit:
+    # Por IP de origem (o Traefik só confia em X-Forwarded-For de redes privadas).
+    average: 20
+    burst: 50
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: otlp-body
+  namespace: observability
+spec:
+  buffering:
+    # Um lote de spans do browser tem poucos KB; 1 MiB já é folga. Acima disso responde 413.
+    maxRequestBodyBytes: 1048576
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: otlp-strip
+  namespace: observability
+spec:
+  stripPrefix:
+    prefixes:
+      - /otlp

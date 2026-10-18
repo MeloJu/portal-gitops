@@ -1,0 +1,107 @@
+# Prometheus + Grafana + kube-state-metrics (réplicas do HPA, pods prontos). Enxuto para
+# caber no Docker de um notebook: sem Alertmanager, retenção de 2 dias.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: kube-prometheus-stack
+  namespace: argocd
+  annotations:
+    # Antes da aplicação: o ServiceMonitor da API depende dos CRDs instalados aqui.
+    argocd.argoproj.io/sync-wave: "-1"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: platform
+  source:
+    repoURL: https://prometheus-community.github.io/helm-charts
+    chart: kube-prometheus-stack
+    targetRevision: 92.10.1
+    helm:
+      releaseName: kps
+      valuesObject:
+        fullnameOverride: kps
+        alertmanager:
+          enabled: false
+        # O K3s não expõe esses componentes do control plane: os alvos ficariam sempre "down".
+        kubeControllerManager:
+          enabled: false
+        kubeScheduler:
+          enabled: false
+        kubeProxy:
+          enabled: false
+        kubeEtcd:
+          enabled: false
+        prometheus:
+          prometheusSpec:
+            retention: 2d
+            # Pega ServiceMonitor/PodMonitor de qualquer namespace, não só os criados pelo chart.
+            serviceMonitorSelectorNilUsesHelmValues: false
+            podMonitorSelectorNilUsesHelmValues: false
+            ruleSelectorNilUsesHelmValues: false
+            # Recebe as métricas que o Tempo gera a partir dos traces (service graph, latência por span).
+            enableRemoteWriteReceiver: true
+            # Guarda os exemplars (traceID) que chegam junto, sem isso eles são descartados.
+            enableFeatures:
+              - exemplar-storage
+            resources:
+              requests:
+                cpu: 100m
+                memory: 400Mi
+              limits:
+                memory: 1Gi
+        grafana:
+          # Senha do admin no Secret `grafana-admin`, criado pelo bootstrap-local.sh (fora do Git).
+          admin:
+            existingSecret: grafana-admin
+            userKey: admin-user
+            passwordKey: admin-password
+          ingress:
+            enabled: true
+            ingressClassName: traefik
+            hosts:
+              - grafana.localhost
+            path: /
+          # Dashboards vêm de ConfigMaps versionados no Git (sidecar do Grafana).
+          sidecar:
+            # Sem Alertmanager instalado, o datasource dele só apareceria quebrado.
+            datasources:
+              alertmanager:
+                enabled: false
+              # Clicar num exemplar abre o trace no Tempo. O label é o que o metrics-generator
+              # do Tempo grava em cada exemplar.
+              exemplarTraceIdDestinations:
+                datasourceUid: tempo
+                traceIdLabelName: traceID
+                urlDisplayLabel: Abrir trace no Tempo
+            dashboards:
+              enabled: true
+              label: grafana_dashboard
+              searchNamespace: ALL
+          additionalDataSources:
+            - name: Tempo
+              uid: tempo
+              type: tempo
+              url: http://tempo.observability:3200
+              access: proxy
+              jsonData:
+                serviceMap:
+                  datasourceUid: prometheus
+                nodeGraph:
+                  enabled: true
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              memory: 384Mi
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: observability
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      # Os CRDs do Prometheus Operator passam do limite de annotation do apply client-side.
+      - ServerSideApply=true

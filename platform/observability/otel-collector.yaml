@@ -1,0 +1,116 @@
+# OpenTelemetry Collector: porta de entrada única dos traces (API, Traefik e, depois, o
+# browser via /otlp). Tira o ruído e repassa para o Tempo.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: otel-collector
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: platform
+  source:
+    repoURL: https://open-telemetry.github.io/opentelemetry-helm-charts
+    chart: opentelemetry-collector
+    targetRevision: 0.176.0
+    helm:
+      releaseName: otel-collector
+      valuesObject:
+        # Nome fixo: a API aponta para http://otel-collector.observability:4318.
+        fullnameOverride: otel-collector
+        mode: deployment
+        image:
+          repository: otel/opentelemetry-collector-contrib
+        resources:
+          requests:
+            cpu: 50m
+            memory: 128Mi
+          limits:
+            memory: 256Mi
+        # Só o que usamos. O chart liga por padrão jaeger, zipkin e prometheus (e as portas deles
+        # no Service); sem uso, só aumentariam a superfície de um componente que tem rota pública.
+        ports:
+          jaeger-compact:
+            enabled: false
+          jaeger-thrift:
+            enabled: false
+          jaeger-grpc:
+            enabled: false
+          zipkin:
+            enabled: false
+          # Receiver EXCLUSIVO do tráfego do browser (rota pública /otlp do Ingress).
+          otlp-browser:
+            enabled: true
+            containerPort: 4319
+            servicePort: 4319
+            protocol: TCP
+        config:
+          receivers:
+            jaeger: null
+            zipkin: null
+            prometheus: null
+            otlp:
+              protocols:
+                grpc:
+                  endpoint: 0.0.0.0:4317
+                http:
+                  endpoint: 0.0.0.0:4318
+            # Separado do `otlp` interno de propósito: quem chega por aqui é da internet e não
+            # pode se passar pela API (ver o processor resource/browser).
+            otlp/browser:
+              protocols:
+                http:
+                  endpoint: 0.0.0.0:4319
+                  max_request_body_size: 1048576
+          processors:
+            # Primeiro sempre: sob carga, recusa dados antes de o pod tomar OOMKill.
+            memory_limiter:
+              check_interval: 1s
+              limit_percentage: 80
+              spike_limit_percentage: 25
+            # As probes batem no Actuator a cada 5-10 s; esses spans só poluem o Tempo.
+            filter/probes:
+              error_mode: ignore
+              traces:
+                span:
+                  - IsMatch(attributes["url.path"], "^/actuator")
+                  - IsMatch(attributes["http.route"], "^/actuator")
+            # Spans do browser: sobrescreve a identidade, porque o cliente controla o que manda.
+            resource/browser:
+              attributes:
+                - key: service.name
+                  value: l2-frontend
+                  action: upsert
+                - key: telemetry.source
+                  value: browser
+                  action: upsert
+            batch: {}
+          exporters:
+            otlp/tempo:
+              endpoint: tempo.observability:4317
+              tls:
+                insecure: true
+          service:
+            pipelines:
+              traces:
+                receivers: [otlp]
+                processors: [memory_limiter, filter/probes, batch]
+                exporters: [otlp/tempo]
+              traces/browser:
+                receivers: [otlp/browser]
+                processors: [memory_limiter, resource/browser, batch]
+                exporters: [otlp/tempo]
+              # Não usamos métricas nem logs por OTLP (métricas vão por scrape, logs ficam no stdout).
+              metrics: null
+              logs: null
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: observability
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

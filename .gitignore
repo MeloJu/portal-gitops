@@ -1,0 +1,30 @@
+# Segredos e estado: nunca no Git
+*.key
+*.pem
+*.mmdb
+kubeconfig*
+*.kubeconfig
+.env
+.env.*
+!.env.example
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
+crash.log
+
+# Local
+.DS_Store
+*.local.yaml
+
+# Chave privada do Sealed Secrets (backup): jamais no Git. Só os arquivos de backup (.yaml), não o
+# script scripts/sealed-secrets-key.sh (um padrão sem extensão o ignorava junto).
+sealed-secrets-key*.yaml
+*-key-backup*.yaml
+
+# Plano do Terraform (pode carregar valores sensíveis)
+tfplan
+*.tfplan

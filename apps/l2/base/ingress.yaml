@@ -1,0 +1,46 @@
+# Um host só (mesma origem): o cookie de sessão HttpOnly funciona sem CORS.
+#
+#   /api/*  -> l2-api:8080
+#   /r/*    -> l2-api:8080   (redirect direto da API; NÃO passa pelo nginx)
+#   /*      -> frontend:8080 (React Router; /{code} é a Travessia)
+#
+# ATENÇÃO: os paths terminam em "/" de propósito. O Traefik implementa `Prefix` como prefixo
+# de TEXTO (não por segmento, como diz a spec do Kubernetes): com "/r", o link curto
+# "rocket" ou "reuniao" cairia na API em vez do frontend. Com "/r/" só entra o que é /r/<algo>.
+# O host é definido por overlay. Nenhuma rota aponta para a 8081 (Actuator).
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: l2
+  annotations:
+    # Camada grossa de rate limit (ver ratelimit.yaml). Formato: <namespace>-<nome>@kubernetescrd.
+    traefik.ingress.kubernetes.io/router.middlewares: l2-ratelimit@kubernetescrd
+  labels:
+    app.kubernetes.io/name: l2
+    app.kubernetes.io/part-of: l2
+spec:
+  ingressClassName: traefik
+  rules:
+    - http:
+        paths:
+          - path: /api/
+            pathType: Prefix
+            backend:
+              service:
+                name: l2-api
+                port:
+                  name: http
+          - path: /r/
+            pathType: Prefix
+            backend:
+              service:
+                name: l2-api
+                port:
+                  name: http
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: frontend
+                port:
+                  name: http

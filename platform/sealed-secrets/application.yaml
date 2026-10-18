@@ -1,0 +1,42 @@
+# Controller do Sealed Secrets: descriptografa SealedSecret (que pode ir para o Git) em Secret
+# dentro do cluster. Só o controller tem a chave privada; quem tem o repositório não lê o segredo.
+#
+# Nomes e namespace são os padrões do `kubeseal` (kube-system / sealed-secrets-controller),
+# então o CLI funciona sem flags extras.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: sealed-secrets
+  namespace: argocd
+  annotations:
+    # Antes da aplicação: um SealedSecret sem o controller nunca vira Secret.
+    argocd.argoproj.io/sync-wave: "-1"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: platform
+  source:
+    repoURL: https://bitnami.github.io/sealed-secrets
+    chart: sealed-secrets
+    # Versão fixada (controller 0.40.0). Atualizar é um commit revisável.
+    targetRevision: 2.20.0
+    helm:
+      releaseName: sealed-secrets
+      valuesObject:
+        fullnameOverride: sealed-secrets-controller
+        resources:
+          requests:
+            cpu: 25m
+            memory: 64Mi
+          limits:
+            cpu: 250m
+            memory: 128Mi
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: kube-system
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - ServerSideApply=true

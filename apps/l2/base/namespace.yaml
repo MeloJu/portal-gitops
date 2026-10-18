@@ -1,0 +1,10 @@
+# Namespace único da aplicação. Pod Security "restricted": todo pod daqui precisa rodar como
+# não-root, sem capabilities e com seccomp RuntimeDefault (os manifests já cumprem isso).
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: l2
+  labels:
+    app.kubernetes.io/part-of: l2
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: latest

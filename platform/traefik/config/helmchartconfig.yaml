@@ -1,0 +1,58 @@
+# Ajuste do Traefik que o K3s instala (HelmChartConfig é do helm-controller do K3s e se casa
+# pelo nome com o HelmChart `traefik`).
+#
+# Por que: a API usa o IP do visitante para o rate limit e para o país da Viagem (GeoIP), lendo
+# X-Forwarded-For (`server.forward-headers-strategy: native`). Por padrão o Traefik NÃO confia em
+# X-Forwarded-For de ninguém e o substitui pelo IP de quem conectou, então todo visitante
+# pareceria ter o IP do proxy e dividiria o mesmo balde de rate limit.
+apiVersion: helm.cattle.io/v1
+kind: HelmChartConfig
+metadata:
+  name: traefik
+  namespace: kube-system
+spec:
+  valuesContent: |-
+    # Preserva o IP de origem do cliente (sem NAT do kube-proxy para outro nó).
+    service:
+      spec:
+        externalTrafficPolicy: Local
+    ports:
+      # Ingress sem `router.entrypoints` só entra em web/websecure. Sem `asDefault` o Traefik v3
+      # liga as rotas em todos os entrypoints, inclusive `metrics` e `traefik` (só internos).
+      web:
+        asDefault: true
+        forwardedHeaders:
+          # Só confia no X-Forwarded-For vindo de redes privadas (o balanceador na frente do
+          # cluster). Um cliente da internet não consegue forjar o IP que a API enxerga.
+          trustedIPs: &trusted
+            - 127.0.0.1/32
+            - 10.0.0.0/8
+            - 172.16.0.0/12
+            - 192.168.0.0/16
+      websecure:
+        asDefault: true
+        forwardedHeaders:
+          trustedIPs: *trusted
+      # Entrypoint só das métricas, no pod e fora do Service: como o Actuator, é lido pelo
+      # Prometheus por dentro do cluster (PodMonitor em platform/observability/monitors).
+      metrics:
+        port: 9100
+        expose:
+          default: false
+    # Requisições, latência e conexões por entrypoint e por serviço (traefik_entrypoint_*,
+    # traefik_service_*). São os padrões do chart, fixados de propósito: o PodMonitor depende
+    # da porta `metrics` e desses labels, e uma troca de padrão no K3s não pode quebrá-lo calado.
+    metrics:
+      prometheus:
+        entryPoint: metrics
+        addEntryPointsLabels: true
+        addServicesLabels: true
+    # Primeiro span de cada requisição (a porta de entrada do cluster). O Traefik propaga o
+    # `traceparent` para a API, então o trace fica: Traefik -> l2-api -> JDBC (Postgres).
+    tracing:
+      serviceName: traefik
+      otlp:
+        enabled: true
+        http:
+          enabled: true
+          endpoint: http://otel-collector.observability:4318/v1/traces

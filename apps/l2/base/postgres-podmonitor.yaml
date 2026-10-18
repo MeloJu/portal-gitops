@@ -1,0 +1,19 @@
+# O Prometheus coleta o sidecar postgres-exporter (porta `metrics`, 9187) direto no pod do Postgres.
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: postgres
+  labels:
+    app.kubernetes.io/name: postgres
+    app.kubernetes.io/part-of: l2
+  annotations:
+    # O CRD vem do kube-prometheus-stack; na primeira passada ele pode ainda não existir.
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: postgres
+  podMetricsEndpoints:
+    - port: metrics
+      path: /metrics
+      interval: 15s

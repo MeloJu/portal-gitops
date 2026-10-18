@@ -1,0 +1,86 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Overlay do smoke test em cluster efêmero (kind). Sem Ingress, sem HPA (o kind não tem
+# metrics-server) e com um Secret descartável: o SealedSecret só abre no cluster dono da chave.
+namespace: l2
+
+resources:
+  - ../../base
+  - secret.yaml
+
+images:
+  - name: ghcr.io/meloju/portal-app-backend
+    newTag: sha-pending
+  - name: ghcr.io/meloju/portal-app-frontend
+    newTag: sha-pending
+  - name: ghcr.io/meloju/portal-app-tools-api
+    newTag: sha-pending
+
+configMapGenerator:
+  - name: l2-config
+    behavior: merge
+    literals:
+      - PUBLIC_BASE_URL=http://localhost
+      - SESSION_COOKIE_SECURE=false
+      # Sem Collector no kind: o agente só geraria erro de exportação no log.
+      - OTEL_SDK_DISABLED=true
+
+patches:
+  - target:
+      kind: Ingress
+      name: l2
+    patch: |-
+      $patch: delete
+      apiVersion: networking.k8s.io/v1
+      kind: Ingress
+      metadata:
+        name: l2
+  # O kind não tem o Prometheus Operator (nem o CRD ServiceMonitor), e sem Collector o agente OTel
+  # só geraria erro de exportação no log.
+  # Sem Traefik no kind: o CRD Middleware não existe lá.
+  - target:
+      kind: Middleware
+      name: ratelimit
+    patch: |-
+      $patch: delete
+      apiVersion: traefik.io/v1alpha1
+      kind: Middleware
+      metadata:
+        name: ratelimit
+  - target:
+      kind: PrometheusRule
+      name: l2
+    patch: |-
+      $patch: delete
+      apiVersion: monitoring.coreos.com/v1
+      kind: PrometheusRule
+      metadata:
+        name: l2
+  - target:
+      kind: PodMonitor
+      name: postgres
+    patch: |-
+      $patch: delete
+      apiVersion: monitoring.coreos.com/v1
+      kind: PodMonitor
+      metadata:
+        name: postgres
+  - target:
+      kind: ServiceMonitor
+      name: l2-api
+    patch: |-
+      $patch: delete
+      apiVersion: monitoring.coreos.com/v1
+      kind: ServiceMonitor
+      metadata:
+        name: l2-api
+  - target:
+      kind: HorizontalPodAutoscaler
+      name: l2-api
+    patch: |-
+      $patch: delete
+      apiVersion: autoscaling/v2
+      kind: HorizontalPodAutoscaler
+      metadata:
+        name: l2-api

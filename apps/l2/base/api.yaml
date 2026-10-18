@@ -1,0 +1,116 @@
+# l2-api: Spring Boot 4 / Java 21. API em 8080, Actuator em 8081 (porta separada: o Ingress
+# só roteia a 8080, então /actuator/prometheus nunca fica público; probes e Prometheus
+# entram pela 8081 por dentro do cluster).
+apiVersion: v1
+kind: Service
+metadata:
+  name: l2-api
+  labels:
+    app.kubernetes.io/name: l2-api
+    app.kubernetes.io/part-of: l2
+spec:
+  selector:
+    app.kubernetes.io/name: l2-api
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+    # Só para Prometheus/probes dentro do cluster. Nenhuma rota do Ingress aponta para cá.
+    - name: management
+      port: 8081
+      targetPort: management
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: l2-api
+  annotations:
+    checkov.io/skip1: "CKV_K8S_40=uid 1001 definido no Dockerfile do backend; mudar exigiria reconstruir a imagem"
+    checkov.io/skip2: "CKV_K8S_43=imagem da aplicacao por tag sha-7 imutavel por commit; digest fica como evolucao (S4)"
+    checkov.io/skip3: "CKV_K8S_15=a tag e unica por commit, entao IfNotPresent e correto e evita pull a cada reinicio"
+    checkov.io/skip4: "CKV_K8S_35=o Spring le DB_PASSWORD e JWT_SECRET do ambiente; o Postgres ja usa arquivo"
+  labels:
+    app.kubernetes.io/name: l2-api
+    app.kubernetes.io/part-of: l2
+spec:
+  # Sem `replicas`: quem manda é o HPA (api-hpa.yaml).
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: l2-api
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: l2-api
+        app.kubernetes.io/part-of: l2
+    spec:
+      serviceAccountName: l2-api
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        runAsGroup: 1001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: l2-api
+          # Tag definida pelo `images:` de cada overlay (o bump automático edita lá).
+          image: ghcr.io/meloju/portal-app-backend
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          ports:
+            - name: http
+              containerPort: 8080
+            - name: management
+              containerPort: 8081
+          envFrom:
+            - configMapRef:
+                name: l2-config
+          env:
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: l2-secrets
+                  key: DB_PASSWORD
+            # A app não sobe sem JWT_SECRET (mínimo 256 bits).
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: l2-secrets
+                  key: JWT_SECRET
+          # A imagem já usa -XX:MaxRAMPercentage=75: com limite de 768Mi o heap fica ~576Mi,
+          # sobrando espaço para metaspace e threads. Abaixo de ~512Mi a JVM leva OOMKill.
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: "1"
+              memory: 768Mi
+          # O Spring leva 10-20 s para subir e ainda roda o Flyway. Sem a startupProbe, a
+          # liveness mataria o pod antes de ele ficar pronto (150 s de janela aqui).
+          startupProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: management
+            periodSeconds: 5
+            failureThreshold: 30
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: management
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: management
+            periodSeconds: 5
+          volumeMounts:
+            # readOnlyRootFilesystem: a JVM e o Tomcat gravam em /tmp.
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}

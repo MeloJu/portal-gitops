@@ -1,0 +1,8 @@
+# Copie para terraform.tfvars (que o .gitignore NÃO deixa entrar no Git) e preencha.
+subscription_id  = "00000000-0000-0000-0000-000000000000" # az account show --query id -o tsv
+location         = "brazilsouth"                          # tem que estar nas regiões permitidas da sua assinatura
+ssh_public_key   = "ssh-ed25519 AAAA... voce@maquina"     # conteúdo do ~/.ssh/id_ed25519.pub
+ssh_allowed_cidr = "203.0.113.7/32"                       # o SEU IP no formato IP/32 (https://api.ipify.org); aceita de /24 a /32, IPv4
+# vm_size               = "Standard_D2s_v4"
+# auto_shutdown_enabled = true
+# auto_shutdown_time    = "2300"

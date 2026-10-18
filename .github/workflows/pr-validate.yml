@@ -1,0 +1,217 @@
+name: PR validate
+
+# Valida os manifests antes do merge. Os jobs são independentes: um vermelho não esconde o outro.
+on:
+  # Qualquer base (PRs empilhados também validam) e `edited`: quando o GitHub retarga um PR
+  # para develop depois do merge do PR de baixo, só o `edited` dispara. Sem ele os checks
+  # obrigatórios ficavam "Waiting for status" para sempre.
+  pull_request:
+    types: [opened, synchronize, reopened, edited]
+  push:
+    branches: [main, develop]
+
+# Menor privilégio: o CI só lê o código.
+permissions:
+  contents: read
+
+concurrency:
+  group: pr-validate-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gitflow:
+    name: Gitflow (origem do PR)
+    # Só faz sentido em pull request; no push o job é pulado (e um check pulado conta como verde).
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      # head_ref/base_ref entram por env: nunca interpolar nome de branch direto no script.
+      - name: Origem permitida para a branch de destino
+        env:
+          HEAD: ${{ github.head_ref }}
+          BASE: ${{ github.base_ref }}
+        run: |
+          case "$BASE" in
+            main)
+              # produção: só o que já passou pela integração, ou uma correção urgente
+              [[ "$HEAD" == "develop" || "$HEAD" =~ ^(release|hotfix)/ ]] ||
+                { echo "::error::PR para main só vem de develop, release/* ou hotfix/* (veio de '$HEAD')"; exit 1; }
+              ;;
+            develop)
+              # dependabot/*: branches que o próprio Dependabot cria (.github/dependabot.yml)
+              [[ "$HEAD" == "main" || "$HEAD" =~ ^(feature|fix|chore|docs|refactor|release|hotfix|dependabot)/ ]] ||
+                { echo "::error::branch '$HEAD' fora do padrão: use feature/*, fix/*, chore/*, docs/* ou refactor/*"; exit 1; }
+              ;;
+          esac
+          echo "ok: $HEAD -> $BASE"
+
+  render:
+    name: kustomize build + kubeconform
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # Falha se algum overlay não renderiza. Overlay que ainda não existe é ignorado.
+      - name: kustomize build de cada overlay
+        run: |
+          mkdir -p rendered
+          for dir in apps/l2/overlays/*/; do
+            name="$(basename "$dir")"
+            echo "::group::${name}"
+            kubectl kustomize "$dir" > "rendered/${name}.yaml"
+            echo "${name}: $(grep -c '^kind:' "rendered/${name}.yaml") recursos"
+            echo "::endgroup::"
+          done
+
+      # O app-of-apps referencia platform/* por caminho relativo; um caminho errado só estoura
+      # no cluster. Aqui só renderiza (os CRDs do Argo/K3s não têm schema no kubeconform).
+      - name: kustomize build do app-of-apps e da plataforma
+        run: |
+          mkdir -p rendered-platform
+          for dir in bootstrap/apps/*/ platform/*/ platform/*/*/; do
+            [ -f "${dir}kustomization.yaml" ] || continue
+            name="$(echo "${dir%/}" | tr '/' '_')"
+            kubectl kustomize "$dir" > "rendered-platform/${name}.yaml" && echo "ok  ${dir}"
+          done
+
+      # Sem tag latest nem imagem sem tag/digest renderizada: o bump automático existe para isso.
+      - name: Imagens sem tag fixa
+        run: |
+          if grep -hE '^\s+image:' rendered/*.yaml | grep -vE '@sha256:|:[A-Za-z0-9._-]+$'; then
+            echo "::error::imagem sem tag ou digest"; exit 1
+          fi
+          if grep -hE '^\s+image:.*:latest$' rendered/*.yaml; then
+            echo "::error::imagem com tag latest"; exit 1
+          fi
+
+      # CRDs (ServiceMonitor, Application do Argo, ClusterIssuer, HelmChartConfig...) validados
+      # pelo catálogo público de schemas; o que não estiver lá falha, não é pulado em silêncio.
+      - name: kubeconform (-strict, com schemas de CRDs)
+        env:
+          CRDS_CATALOG: https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json
+        run: |
+          for f in rendered/*.yaml rendered-platform/*.yaml; do
+            dir="$(dirname "$f")"
+            docker run --rm -v "$PWD/${dir}:/in:ro" ghcr.io/yannh/kubeconform:v0.8.0@sha256:faffaf43f95aa6425306e1ab8d6fcad72acb9049158f38e574c085ea1ec0f64e \
+              -summary -strict -kubernetes-version 1.35.0 \
+              -schema-location default -schema-location "$CRDS_CATALOG" \
+              "/in/$(basename "$f")"
+          done
+
+  checkov:
+    name: Checkov (segurança dos manifests)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # Analisa o que o ArgoCD realmente aplica (o overlay renderizado), não o YAML cru da base.
+      - name: Renderiza os overlays
+        run: |
+          mkdir -p rendered
+          for dir in apps/l2/overlays/*/; do
+            kubectl kustomize "$dir" > "rendered/$(basename "$dir").yaml"
+          done
+
+      # HARD-FAIL: pods privilegiados, root, sem limites, sem probes, etc. barram o PR.
+      # O que é inevitável por causa da imagem (uid fixo, tag em vez de digest, segredo por
+      # ambiente) está justificado em `checkov.io/skipN` no próprio manifesto, com o motivo.
+      # Sem exceções na linha de comando: tudo que falhar barra o PR.
+      - name: Checkov
+        run: |
+          docker run --rm -v "$PWD/rendered:/rl:ro" bridgecrew/checkov:3.2.500@sha256:5a4407716a99cb170af27f1df9467f23d6f335fe824384b9ad053f58388d81a4 \
+            -d /rl --framework kubernetes --compact --quiet
+
+  terraform:
+    name: Terraform (fmt, validate, scan)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # Imagens oficiais fixadas: sem action de terceiro e com a mesma versão em todo PR.
+      - name: terraform fmt
+        run: docker run --rm -v "$PWD/terraform:/tf" -w /tf hashicorp/terraform:1.15.9@sha256:fd5debae63188975d6febc6aa5bd1a982a588f55e4a4ddb7de28be923f250456 fmt -check -recursive -diff
+
+      # Não autentica na Azure: só baixa os providers e confere o schema, o grafo e as validações de variável.
+      - name: terraform validate
+        run: |
+          docker run --rm -v "$PWD/terraform:/tf" -w /tf hashicorp/terraform:1.15.9@sha256:fd5debae63188975d6febc6aa5bd1a982a588f55e4a4ddb7de28be923f250456 init -backend=false -input=false
+          docker run --rm -v "$PWD/terraform:/tf" -w /tf hashicorp/terraform:1.15.9@sha256:fd5debae63188975d6febc6aa5bd1a982a588f55e4a4ddb7de28be923f250456 validate
+
+      # A validação de `ssh_allowed_cidr` é a ÚNICA barreira contra o SSH aberto ao mundo (o scanner não avalia
+      # valores vindos de variável). Estes testes provam que ela recusa 0.0.0.0/0, 0.0.0.0/1, /0, /8, IPv6 etc.
+      # e aceita /24 a /32; sem eles, um PR futuro poderia afrouxá-la sem ninguém notar.
+      - name: terraform test (validação do CIDR do SSH)
+        run: docker run --rm -v "$PWD/terraform:/tf" -w /tf hashicorp/terraform:1.15.9@sha256:fd5debae63188975d6febc6aa5bd1a982a588f55e4a4ddb7de28be923f250456 test
+
+      # Falha em qualquer achado. Os que são intencionais (80/443 abertos, IP público na NIC) estão
+      # justificados em `#trivy:ignore:<id>` no próprio main.tf, com o motivo.
+      - name: Trivy (IaC)
+        run: |
+          docker run --rm -v "$PWD/terraform:/tf:ro" aquasec/trivy:0.69.1@sha256:1c78ed1ef824ab8bb05b04359d186e4c1229d0b3e67005faacb54a7d71974f73 config \
+            --severity LOW,MEDIUM,HIGH,CRITICAL --exit-code 1 /tf
+
+  promtool:
+    name: Regras de alerta (promtool)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # Séries sintéticas provam que cada alerta dispara quando deve e fica quieto quando não deve.
+      - name: promtool test rules
+        run: ./tests/alerts/run.sh
+
+  yamllint:
+    name: yamllint
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - run: pip install yamllint==1.37.1
+      - run: yamllint -c .yamllint.yaml apps bootstrap platform .github
+
+      # Quem edita no Windows não grava o bit de execução (core.filemode=false), e num Linux o script dá
+      # "Permission denied". Já aconteceu com quase todos os scripts deste repositório.
+      - name: Scripts .sh executáveis no Git
+        run: |
+          bad="$(git ls-files -s -- '*.sh' | awk '$1 != "100755" {print $4}')"
+          if [ -n "$bad" ]; then
+            echo "::error::sem bit de execução (rode: git update-index --chmod=+x <arquivo>): $bad"; exit 1
+          fi
+
+  gitleaks:
+    name: gitleaks (segredos no Git)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_CONFIG: .gitleaks.toml
+
+  no-plain-secrets:
+    name: Nenhum Secret em claro
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # base64 não é criptografia: kind: Secret só é aceito no overlay ci (descartável).
+      # Em produção o segredo entra como SealedSecret.
+      - name: kind Secret fora do overlay ci
+        run: |
+          bad="$(grep -rlE '^kind:\s*Secret\s*$' apps bootstrap platform 2>/dev/null | grep -v '^apps/l2/overlays/ci/' || true)"
+          if [ -n "$bad" ]; then
+            echo "::error::Secret em claro no Git (use SealedSecret): $bad"; exit 1
+          fi

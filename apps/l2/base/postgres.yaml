@@ -1,0 +1,194 @@
+# Postgres do portal: script de init + Service + Deployment.
+#
+# O script roda UMA vez, quando o volume está vazio (comportamento do /docker-entrypoint-initdb.d).
+# Mudar o script depois não altera um banco que já existe.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-init
+  labels:
+    app.kubernetes.io/name: postgres
+    app.kubernetes.io/part-of: l2
+data:
+  # A API não conecta como superuser: usa `l2_app`, dona do banco `l2`. No PG >= 15 o schema
+  # `public` pertence ao dono do banco (pg_database_owner), então o Flyway migra sem superuser.
+  # A senha vem de arquivo montado do Secret e entra no psql como variável (:'app_password'),
+  # sem passar por interpolação do shell no SQL.
+  10-app-role.sh: |
+    #!/bin/sh
+    set -eu
+    APP_PASSWORD="$(cat /run/secrets/l2/app-password)"
+    psql -v ON_ERROR_STOP=1 -v app_password="$APP_PASSWORD" \
+      --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<'SQL'
+    CREATE ROLE l2_app LOGIN PASSWORD :'app_password';
+    ALTER DATABASE l2 OWNER TO l2_app;
+    SQL
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  labels:
+    app.kubernetes.io/name: postgres
+    app.kubernetes.io/part-of: l2
+spec:
+  selector:
+    app.kubernetes.io/name: postgres
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: postgres
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres
+  annotations:
+    checkov.io/skip1: "CKV_K8S_40=uid 70 do usuario postgres da imagem alpine; o initdb exige um uid existente no /etc/passwd"
+  labels:
+    app.kubernetes.io/name: postgres
+    app.kubernetes.io/part-of: l2
+spec:
+  replicas: 1
+  strategy:
+    # PVC ReadWriteOnce só monta em um pod por vez. Com RollingUpdate o pod novo ficaria
+    # esperando um volume que o antigo ainda segura, e o rollout trava.
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: postgres
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: postgres
+        app.kubernetes.io/part-of: l2
+    spec:
+      serviceAccountName: postgres
+      automountServiceAccountToken: false
+      securityContext:
+        # uid/gid 70 = usuário `postgres` da variante alpine (no Debian seria 999).
+        runAsNonRoot: true
+        runAsUser: 70
+        runAsGroup: 70
+        fsGroup: 70
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: postgres
+          # Mesma major do docker-compose do portal-app. Fixada por digest: a tag é um
+          # ponteiro móvel, o digest identifica o conteúdo (build reprodutível).
+          image: postgres@sha256:77f585114c32fbca283dc835b0596f4e52b51b4c6662d7810b2f4084f60a1873
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          ports:
+            - name: postgres
+              containerPort: 5432
+          env:
+            - name: POSTGRES_USER
+              value: postgres
+            - name: POSTGRES_DB
+              value: l2
+            # Credencial lida de arquivo, não de variável de ambiente.
+            - name: POSTGRES_PASSWORD_FILE
+              value: /run/secrets/l2/postgres-password
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          # A primeira subida roda initdb + script de init; a startupProbe dá essa janela
+          # sem afrouxar a liveness em regime normal.
+          startupProbe:
+            exec:
+              command: ["pg_isready", "-U", "postgres", "-d", "l2"]
+            periodSeconds: 3
+            failureThreshold: 40
+          livenessProbe:
+            exec:
+              command: ["pg_isready", "-U", "postgres", "-d", "l2"]
+            periodSeconds: 10
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "postgres", "-d", "l2"]
+            periodSeconds: 5
+          volumeMounts:
+            # Postgres 18+: o mount vai em /var/lib/postgresql (PGDATA fica numa subpasta por versão).
+            - name: data
+              mountPath: /var/lib/postgresql
+            - name: secrets
+              mountPath: /run/secrets/l2
+              readOnly: true
+            - name: init
+              mountPath: /docker-entrypoint-initdb.d
+              readOnly: true
+            # readOnlyRootFilesystem exige volumes graváveis para o que o Postgres usa fora do PGDATA.
+            - name: run
+              mountPath: /var/run/postgresql
+            - name: tmp
+              mountPath: /tmp
+        # Métricas do banco para o Prometheus (conexões, transações, tamanho). Conecta como `l2_app`, a mesma
+        # role de privilégio mínimo da API (não o superuser), com a senha lida de arquivo.
+        - name: postgres-exporter
+          image: quay.io/prometheuscommunity/postgres-exporter@sha256:ac5ec343104fae0e2d84a27bb8d69b38430a11910c5382cad85d478d2bab713e
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          ports:
+            - name: metrics
+              containerPort: 9187
+          env:
+            - name: DATA_SOURCE_URI
+              value: localhost:5432/l2?sslmode=disable
+            - name: DATA_SOURCE_USER
+              value: l2_app
+            - name: DATA_SOURCE_PASS_FILE
+              value: /run/secrets/l2/app-password
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              cpu: 100m
+              memory: 64Mi
+          readinessProbe:
+            httpGet:
+              path: /metrics
+              port: metrics
+            periodSeconds: 15
+          livenessProbe:
+            httpGet:
+              path: /metrics
+              port: metrics
+            periodSeconds: 30
+          volumeMounts:
+            - name: secrets
+              mountPath: /run/secrets/l2
+              readOnly: true
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: postgres-pvc
+        - name: secrets
+          secret:
+            secretName: l2-secrets
+            defaultMode: 0440
+            items:
+              - key: POSTGRES_PASSWORD
+                path: postgres-password
+              - key: DB_PASSWORD
+                path: app-password
+        - name: init
+          configMap:
+            name: postgres-init
+            defaultMode: 0555
+        - name: run
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}

@@ -1,0 +1,15 @@
+# Rate limit em DUAS camadas (SECURITY.md do portal-app, seção 11):
+#   1) aqui, no Traefik: alto e grosseiro, protege o cluster de flood antes de chegar em qualquer pod;
+#   2) na API (Bucket4j): fino, 60/min por IP em login/cadastro/viagem, e é o que alimenta o painel de Ameaças.
+# Uma requisição barrada aqui NÃO vira "ameaça bloqueada" no painel (nunca chega na API), por isso o limite
+# é bem acima do uso normal: a cena de cliques da demo gera ~53 req/s de um único IP.
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: ratelimit
+  labels:
+    app.kubernetes.io/part-of: l2
+spec:
+  rateLimit:
+    average: 200
+    burst: 500

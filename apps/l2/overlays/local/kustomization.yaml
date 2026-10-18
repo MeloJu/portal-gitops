@@ -1,0 +1,65 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+# Cluster local (k3d). O ArgoCD do cluster local segue a branch `develop`.
+namespace: l2
+resources:
+  - ../../base
+# O Secret `l2-secrets` é criado por scripts/bootstrap-local.sh (valores aleatórios, fora do
+# Git): cada dev tem o seu cluster, e um SealedSecret só abre no cluster que o selou.
+
+# Bump automático (portal-app -> este arquivo) edita só o bloco `images`.
+# `sha-pending` é o placeholder até a primeira publicação; scripts/load-local-images.sh
+# constrói as imagens de um checkout local do portal-app com essa tag.
+images:
+  - name: ghcr.io/meloju/portal-app-backend
+    newTag: sha-f6a2ea0
+    digest: sha256:b58b5496ac5edd3690b53c8b8910183125c21101383ccc7a81e343cf2c04d966
+  - name: ghcr.io/meloju/portal-app-frontend
+    newTag: sha-f6a2ea0
+    digest: sha256:1f772fb9812cd0488b559de46add082c40bd51cd932f94914921425f078812c4
+  - name: ghcr.io/meloju/portal-app-tools-api
+    newTag: sha-f6a2ea0
+    digest: sha256:f62eb974a6897d82c54d791144ba1c032cbe11bbea66750b04b629caedc0a82f
+configMapGenerator:
+  - name: l2-config
+    behavior: merge
+    literals:
+      - PUBLIC_BASE_URL=http://l2.localhost
+      # Sem redirect para HTTPS no local: o cookie Secure não voltaria por HTTP. NUNCA no oracle.
+      - SESSION_COOKIE_SECURE=false
+      # Demo: o limite padrão (60 viagens/min por IP) trava o loop de cliques antes de gerar CPU
+      # para o HPA. Login e cadastro ficam no padrão, para a cena de "ameaça bloqueada".
+      - APP_RATELIMIT_TRAVEL_CAPACITY=6000
+      # Separa os traces por ambiente no Tempo/Grafana.
+      - OTEL_RESOURCE_ATTRIBUTES=deployment.environment=local
+patches:
+  - target:
+      kind: Ingress
+      name: l2
+    patch: |-
+      - op: add
+        path: /spec/rules/0/host
+        value: l2.localhost
+      # HTTPS com certificado self-signed emitido pelo cert-manager (o navegador vai avisar).
+      # O HTTP continua respondendo: não há redirect no local, para a demo não depender do aviso.
+      # Adiciona SÓ esta chave: `add /metadata/annotations` com um mapa substituiria as anotações da base
+      # (e o middleware de rate limit sumiria). No JSON Pointer, a "/" do nome da chave vira "~1".
+      - op: add
+        path: /metadata/annotations/cert-manager.io~1cluster-issuer
+        value: selfsigned
+      - op: add
+        path: /spec/tls
+        value:
+          - hosts:
+              - l2.localhost
+            secretName: l2-tls
+  - target:
+      kind: HorizontalPodAutoscaler
+      name: l2-api
+    patch: |-
+      - op: replace
+        path: /spec/minReplicas
+        value: 1
+      - op: replace
+        path: /spec/maxReplicas
+        value: 3
