@@ -524,6 +524,110 @@
       }
     },
     {
+      "id": 14,
+      "title": "Pods prontos (l2)",
+      "description": "Réplicas disponíveis × desejadas, somando os Deployments do namespace l2 (kube-state-metrics).",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 28,
+        "w": 12,
+        "h": 4
+      },
+      "targets": [
+        {
+          "expr": "sum(kube_deployment_status_replicas_available{namespace=\"l2\"})",
+          "legendFormat": "prontos",
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          }
+        },
+        {
+          "expr": "sum(kube_deployment_spec_replicas{namespace=\"l2\"})",
+          "legendFormat": "desejados",
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0
+        }
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value_and_name"
+      }
+    },
+    {
+      "id": 15,
+      "title": "Reinícios (no período)",
+      "description": "Containers reiniciados: o kubelet reiniciou o processo no mesmo pod (crash, OOMKill, liveness). Pods recriados: pods do l2 criados no período (delete, rollout, scale-up do HPA); um pod novo nasce com restartCount 0, então delete não aparece no primeiro número.",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 28,
+        "w": 12,
+        "h": 4
+      },
+      "targets": [
+        {
+          "expr": "sum(increase(kube_pod_container_status_restarts_total{namespace=\"l2\"}[$__range])) or vector(0)",
+          "legendFormat": "containers reiniciados",
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          }
+        },
+        {
+          "expr": "count(max_over_time(kube_pod_created{namespace=\"l2\"}[$__range]) > (time() - $__range_s)) or vector(0)",
+          "legendFormat": "pods recriados",
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0
+        }
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value_and_name"
+      }
+    },
+    {
       "id": 12,
       "title": "Mapa de serviços (dos traces)",
       "type": "nodeGraph",
@@ -533,7 +637,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 28,
+        "y": 32,
         "w": 12,
         "h": 10
       },
@@ -558,7 +662,7 @@
       },
       "gridPos": {
         "x": 12,
-        "y": 28,
+        "y": 32,
         "w": 12,
         "h": 10
       },

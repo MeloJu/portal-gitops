@@ -55,6 +55,7 @@ humana pegaram falhas que o código gerado escondia**.
 | Service graph do Tempo vazio | Painel "Mapa de serviços" sem dado | Li o chart: os processadores ficam em `overrides.defaults.metrics_generator` |
 | Painel "cliques humanos" | Sob carga marcou 0: o `curl` é classificado como bot pelo User-Agent | Painel conta todas as viagens; a divisão bot/humano fica no gráfico ao lado |
 | G1 marcada como feita | O usuário perguntou se as Gs estavam prontas; a `main` não existia | Status corrigido para parcial |
+| Critério do O7 "deletar um pod faz o contador de reinícios subir" | Testado no k3d: depois do `kubectl delete pod`, `kube_pod_container_status_restarts_total` ficou em 0 (o pod novo nasce com `restartCount` 0); só subiu com `kill 1` no container | Painel "Reinícios" com dois números: containers reiniciados (crash/OOM/liveness) e pods recriados (delete, rollout, HPA) |
 
 ## Decisões que o Claude propôs e a equipe aceitou ou mudou
 
@@ -64,6 +65,9 @@ humana pegaram falhas que o código gerado escondia**.
 - **Janela de 60 s no scale-up do HPA**: o boot da JVM (Spring + Flyway) gerava scale-up em cascata.
 - **Limite de viagens alto só no overlay `local`** (`APP_RATELIMIT_TRAVEL_CAPACITY`): o padrão de 60/min
   por IP trava o loop de cliques antes de gerar CPU para o HPA. Login e cadastro ficam no padrão.
+- **Exemplars (métrica → trace) adiados para o `portal-app`**: o `/actuator/prometheus` responde em OpenMetrics, mas sem
+  nenhum exemplar, porque o agente Java do OTel não entrega SpanContext ao Micrometer. Ligar `exemplar-storage` e
+  `exemplars: true` antes disso só criaria um botão que nunca aparece.
 
 ## Próximas entradas
 
