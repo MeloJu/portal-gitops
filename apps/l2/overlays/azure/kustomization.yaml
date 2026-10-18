@@ -26,7 +26,8 @@ configMapGenerator:
   - name: l2-config
     behavior: merge
     literals:
-      - PUBLIC_BASE_URL=https://l2-mk6a4.brazilsouth.cloudapp.azure.com
+      # Os links curtos nascem neste endereço (o DuckDNS é o "nome bonito"; o do Azure fica de reserva).
+      - PUBLIC_BASE_URL=https://lumilinks.duckdns.org
       # HTTPS de verdade: o cookie de sessão só trafega por TLS.
       - SESSION_COOKIE_SECURE=true
       # Separa os traces por ambiente no Tempo/Grafana.
@@ -38,7 +39,35 @@ patches:
     patch: |-
       - op: add
         path: /spec/rules/0/host
-        value: l2-mk6a4.brazilsouth.cloudapp.azure.com
+        value: lumilinks.duckdns.org
+      # Reserva: o nome da Azure continua respondendo (se o DuckDNS cair, o site segue no ar).
+      - op: add
+        path: /spec/rules/-
+        value:
+          host: l2-mk6a4.brazilsouth.cloudapp.azure.com
+          http:
+            paths:
+              - path: /api/
+                pathType: Prefix
+                backend:
+                  service:
+                    name: l2-api
+                    port:
+                      name: http
+              - path: /r/
+                pathType: Prefix
+                backend:
+                  service:
+                    name: l2-api
+                    port:
+                      name: http
+              - path: /
+                pathType: Prefix
+                backend:
+                  service:
+                    name: frontend
+                    port:
+                      name: http
       # Adiciona SÓ esta chave: `add /metadata/annotations` com um mapa substituiria as anotações da base
       # (e o middleware de rate limit sumiria). No JSON Pointer, a "/" do nome da chave vira "~1".
       - op: add
@@ -47,7 +76,9 @@ patches:
       - op: add
         path: /spec/tls
         value:
+          # Um certificado só, com os dois nomes.
           - hosts:
+              - lumilinks.duckdns.org
               - l2-mk6a4.brazilsouth.cloudapp.azure.com
             secretName: l2-tls
   # Uma VM só (2 vCPU): até 3 réplicas da API cabem, e o HPA continua sendo a cena da demo.

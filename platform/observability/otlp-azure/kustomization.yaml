@@ -1,7 +1,8 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
-# A rota pública de traces é a mesma do local; só o host muda.
+# A rota pública de traces é a mesma do local; só os hosts mudam. O navegador envia os spans para a
+# mesma origem da página, então a rota existe para os dois nomes do site (o DuckDNS e o da Azure).
 resources:
   - ../otlp
 
@@ -12,14 +13,43 @@ patches:
     patch: |-
       - op: replace
         path: /spec/rules/0/host
-        value: l2-mk6a4.brazilsouth.cloudapp.azure.com
+        value: lumilinks.duckdns.org
+      - op: add
+        path: /spec/rules/-
+        value:
+          host: l2-mk6a4.brazilsouth.cloudapp.azure.com
+          http:
+            paths:
+              - path: /otlp/v1/traces
+                pathType: Exact
+                backend:
+                  service:
+                    name: otel-collector
+                    port:
+                      number: 4319
   - target:
       kind: Ingress
       name: otlp-tls
     patch: |-
       - op: replace
         path: /spec/tls/0/hosts/0
+        value: lumilinks.duckdns.org
+      - op: add
+        path: /spec/tls/0/hosts/-
         value: l2-mk6a4.brazilsouth.cloudapp.azure.com
       - op: replace
         path: /spec/rules/0/host
-        value: l2-mk6a4.brazilsouth.cloudapp.azure.com
+        value: lumilinks.duckdns.org
+      - op: add
+        path: /spec/rules/-
+        value:
+          host: l2-mk6a4.brazilsouth.cloudapp.azure.com
+          http:
+            paths:
+              - path: /otlp/v1/traces
+                pathType: Exact
+                backend:
+                  service:
+                    name: otel-collector
+                    port:
+                      number: 4319
