@@ -88,12 +88,14 @@ spec:
                   datasourceUid: prometheus
                 nodeGraph:
                   enabled: true
+          # Medido na VM Azure: o Grafana usa ~340 MiB com o dashboard de 19 painéis aberto e o limite
+          # antigo (384 MiB) o matava por OOM a cada consulta pesada (Explore do Tempo, períodos longos).
           resources:
             requests:
               cpu: 50m
-              memory: 128Mi
+              memory: 256Mi
             limits:
-              memory: 384Mi
+              memory: 768Mi
   destination:
     server: https://kubernetes.default.svc
     namespace: observability
