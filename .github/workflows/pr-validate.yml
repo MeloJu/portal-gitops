@@ -123,6 +123,16 @@ jobs:
           docker run --rm -v "$PWD/rendered:/rl:ro" bridgecrew/checkov:3.2.500 \
             -d /rl --framework kubernetes --compact --quiet
 
+  promtool:
+    name: Regras de alerta (promtool)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      # Séries sintéticas provam que cada alerta dispara quando deve e fica quieto quando não deve.
+      - name: promtool test rules
+        run: ./tests/alerts/run.sh
+
   yamllint:
     name: yamllint
     runs-on: ubuntu-latest

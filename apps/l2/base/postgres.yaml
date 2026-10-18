@@ -131,6 +131,46 @@ spec:
               mountPath: /var/run/postgresql
             - name: tmp
               mountPath: /tmp
+        # Métricas do banco para o Prometheus (conexões, transações, tamanho). Conecta como `l2_app`, a mesma
+        # role de privilégio mínimo da API (não o superuser), com a senha lida de arquivo.
+        - name: postgres-exporter
+          image: quay.io/prometheuscommunity/postgres-exporter@sha256:ac5ec343104fae0e2d84a27bb8d69b38430a11910c5382cad85d478d2bab713e
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          ports:
+            - name: metrics
+              containerPort: 9187
+          env:
+            - name: DATA_SOURCE_URI
+              value: localhost:5432/l2?sslmode=disable
+            - name: DATA_SOURCE_USER
+              value: l2_app
+            - name: DATA_SOURCE_PASS_FILE
+              value: /run/secrets/l2/app-password
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              cpu: 100m
+              memory: 64Mi
+          readinessProbe:
+            httpGet:
+              path: /metrics
+              port: metrics
+            periodSeconds: 15
+          livenessProbe:
+            httpGet:
+              path: /metrics
+              port: metrics
+            periodSeconds: 30
+          volumeMounts:
+            - name: secrets
+              mountPath: /run/secrets/l2
+              readOnly: true
       volumes:
         - name: data
           persistentVolumeClaim:
