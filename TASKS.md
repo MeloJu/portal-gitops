@@ -291,12 +291,12 @@ Actions pinadas **por SHA com comentário de versão**, `permissions: contents: 
 ### Épico D — CD / integração com o `portal-app`
 
 - [ ] **D1 · P0 · M — Fechar o contrato do bump:** alinhar `release.yml` ↔ overlays (caminho `apps/l2/overlays/<env>/kustomization.yaml`, `name` das imagens, `yq`). Criar `GITOPS_TOKEN` (PAT fine-grained, *Contents: write* só neste repo) no `portal-app`.
-  ◐ *Parcial:* contrato fechado no workflow (overlay `local`, `images[].newTag` via `yq`, PR + auto-merge). Depende do token com escrita para ser validado de ponta a ponta.
+  ◐ *Parcial:* contrato fechado e exercitado até a branch de bump (overlay `local`, `images[].newTag`, `yq`); o bump entrou na `develop` (PR #12) e o ArgoCD trocou as 3 imagens. Falta o PR automático (permissão do token).
 - [ ] **D2 · P0 · S — Conciliar com branch protection:** o `release.yml` dá `git push origin HEAD:main`. Opções: (a) bypass só para o bot/PAT; (b) PR automático com auto-merge. Recomendado **(a)** no hackathon; (b) como evolução. Documentar.
-  ◐ *Parcial:* decidido: **PR com auto-merge** (nada pula a proteção de branch). *Allow auto-merge* ligado no `portal-gitops`. Falta o token com escrita para exercitar.
+  ◐ *Parcial:* decidido e confirmado: PR + auto-merge, sem pular a proteção de branch. O PR #12 entrou sozinho (auto-merge) depois dos 5 checks. Falta o job abrir o PR sem ajuda.
 - [ ] **D3 · P1 · M — Fluxo `develop` → `overlays/local`:** o `release.yml` só cobre `main` (→ `oracle`). Replicar o job de bump para `develop` editando o overlay `local` na branch `develop` deste repo (X2).
 - [x] **D4 · P0 · S — Acesso do cluster ao GHCR:** pacotes nascem privados — torná-los **públicos** ou `imagePullSecret` selado. Testar `ImagePullBackOff` antes da demo.
-  ✅ *Feito:* as três imagens `ghcr.io/meloju/portal-app-*:sha-ac36872` baixam **sem login** (manifest `200` anônimo): os pacotes herdaram a visibilidade pública do repositório; não precisa de `imagePullSecret`.
+  ✅ *Feito:* as três imagens `ghcr.io/meloju/portal-app-*:sha-ac36872` baixam **sem login** e foram baixadas pelo cluster (eventos `Pulled` do kubelet, 8 a 19 s); não precisa de `imagePullSecret`.
 - [ ] **D5 · P2 · M — Promoção com gate:** PR `release/*` → `main` verificando que as 3 tags existem; rollback = `git revert` do bump.
 
 ### Épico T — Terraform / Oracle Cloud (`terraform/`)
@@ -356,7 +356,7 @@ Helm via ArgoCD em `platform/observability/`.
 - [x] **X1 · P0 · S — Convenção única de imagem** (§3.1 ②): `ghcr.io/meloju/portal-app-{backend,frontend,tools-api}:<sha7>`. Mergear `feature/release-pipeline` em `develop`.
   ✅ *Feito:* nome único `ghcr.io/meloju/portal-app-{backend,frontend,tools-api}` e tag `sha-<7>`, publicados pelo `images.yml` (portal-app #69); o `publish-backend.yml` foi removido.
 - [ ] **X2 · P0 · M — Um workflow `images.yml`** (matriz dos 3 serviços; PR = build+Trivy sem push; `develop` → bump de `overlays/local`; `main` → bump de `overlays/oracle`), substituindo `publish-backend.yml` e `release.yml`. Hoje frontend e tools-api não têm publicação em `develop`.
-  ◐ *Parcial:* o `images.yml` roda depois de todos os testes, o Trivy barra CRITICAL e as três imagens foram publicadas no primeiro push em `develop`. **Falta o PR de bump**: o job falhou com `403` no push porque o `GITOPS_TOKEN` não tem escrita no `portal-gitops` (conferir *Contents: Read and write* e *Pull requests: Read and write*).
+  ◐ *Parcial:* validado: o `images.yml` roda depois dos testes, o Trivy barra CRITICAL, as 3 imagens `sha-ac36872` foram publicadas, a branch de bump foi criada pelo próprio workflow (push com `GITOPS_TOKEN` OK) e o cluster passou a rodar as imagens do GHCR. **Falta só o job abrir o PR sozinho**: o token precisa de *Pull requests: Read and write* (erro: `Resource not accessible by personal access token (createPullRequest)`). O PR #12 foi aberto à mão com o mesmo conteúdo.
 - [x] **X3 · P1 · S — Probes:** confirmar `/actuator/health/liveness|readiness` na 8081 com `MANAGEMENT_ENDPOINT_HEALTH_PROBES_ENABLED=true`; **manter o banco fora do grupo readiness** (§3.1 ⑥).
   ✅ *Feito:* verificado sem mudar o `portal-app`: `/actuator/health/readiness` responde `UP` na 8081, o banco fica fora do grupo readiness (padrão do Spring) e o ConfigMap seta `MANAGEMENT_ENDPOINT_HEALTH_PROBES_ENABLED=true`.
 - [ ] **X4 · P1 · L — OTel no browser** (`@opentelemetry/sdk-trace-web` + fetch instrumentation), exportando OTLP/HTTP para `/otlp` (mesma origem, sem CORS) e propagando `traceparent` no `api/client.ts`.
