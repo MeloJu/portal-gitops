@@ -70,8 +70,13 @@ Detalhes e o teste de restauração: [`sealed-secrets.md`](sealed-secrets.md).
 A aplicação (pública, HTTPS de verdade):
 
 ```
-https://<fqdn>        # terraform -chdir=terraform output -raw fqdn
+https://lumilinks.duckdns.org    # nome principal (DuckDNS, grátis): os links curtos nascem aqui
+https://<fqdn>                   # reserva: terraform -chdir=terraform output -raw fqdn
 ```
+
+O DuckDNS aponta para o IP fixo da VM (`terraform output public_ip`). Se ele cair, o nome da Azure
+continua respondendo, com o mesmo certificado (um certificado só, com os dois nomes). O Grafana só
+responde no nome principal.
 
 Tudo o que não é público passa por `scripts/azure.sh`. Cada comando abre um túnel e fica em primeiro
 plano; **Ctrl+C fecha o acesso**.
@@ -79,7 +84,7 @@ plano; **Ctrl+C fecha o acesso**.
 | Quero ver | Comando | Abrir |
 | --- | --- | --- |
 | Applications do ArgoCD, pods, HPA, certificado | `./scripts/azure.sh status` | (no terminal) |
-| Grafana (dashboards, traces no Tempo, alertas) | **sem comando**, direto no navegador (usuário `admin`; a senha: `./scripts/azure.sh senhas`) | `https://<fqdn>/grafana/` (com a barra final) |
+| Grafana (dashboards, traces no Tempo, alertas) | **sem comando**, direto no navegador (usuário `admin`; a senha: `./scripts/azure.sh senhas`) | `https://lumilinks.duckdns.org/grafana/` (com a barra final) |
 | Grafana, se o Ingress estiver fechado | `./scripts/azure.sh grafana` | http://localhost:3000 |
 | ArgoCD (UI) | `./scripts/azure.sh argocd` | https://localhost:8444 |
 | Senhas do Grafana e do ArgoCD | `./scripts/azure.sh senhas` | (no terminal) |

@@ -51,7 +51,7 @@ patches:
       - op: replace
         path: /spec/source/helm/valuesObject/grafana/ingress/hosts
         value:
-          - l2-mk6a4.brazilsouth.cloudapp.azure.com
+          - lumilinks.duckdns.org
       - op: replace
         path: /spec/source/helm/valuesObject/grafana/ingress/path
         value: /grafana/
@@ -60,10 +60,11 @@ patches:
         path: /spec/source/helm/valuesObject/grafana/ingress/tls
         value:
           - hosts:
-              - l2-mk6a4.brazilsouth.cloudapp.azure.com
+              - lumilinks.duckdns.org
+      # O Grafana só responde no nome principal (o root_url é um só; no nome de reserva redirecionaria).
       - op: add
         path: /spec/source/helm/valuesObject/grafana/grafana.ini
         value:
           server:
-            root_url: https://l2-mk6a4.brazilsouth.cloudapp.azure.com/grafana/
+            root_url: https://lumilinks.duckdns.org/grafana/
             serve_from_sub_path: true
