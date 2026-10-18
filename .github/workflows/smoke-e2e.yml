@@ -1,0 +1,72 @@
+name: Smoke e2e
+
+# Sobe a aplicação num cluster Kubernetes EFÊMERO (kind), criado do zero a cada execução, e roda
+# tests/smoke.sh. Cluster novo de propósito: um ambiente de longa duração acumula estado aplicado à mão
+# e esconde passos que faltam na automação (lição do desafio de referência).
+#
+# Nos PRs de bump do portal-app isso significa: a imagem nova só entra se subir e funcionar de verdade.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited]
+  push:
+    branches: [main, develop]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: smoke-e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  KIND_VERSION: v0.33.0
+  KIND_SHA256: aee6151561422756b764a4ae28e7f44cda5af5a9eead3cc9985112b1de8d8e0d
+  # Mesma minor do K3s local (1.35), fixada por digest.
+  KIND_NODE: kindest/node:v1.35.8@sha256:07b2536e30b803ed61d1677a79df6115f798ce64c80f9e22f6ed45afd09323c0
+  NAMESPACE: l2
+
+jobs:
+  smoke:
+    name: Smoke e2e (kind)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      # Binário oficial com checksum conferido, em vez de uma action de terceiro.
+      - name: Instala o kind
+        run: |
+          curl -fsSLo kind "https://github.com/kubernetes-sigs/kind/releases/download/${KIND_VERSION}/kind-linux-amd64"
+          echo "${KIND_SHA256}  kind" | sha256sum -c -
+          chmod +x kind && sudo mv kind /usr/local/bin/kind
+
+      - name: Cria o cluster efêmero
+        run: kind create cluster --name smoke --image "$KIND_NODE" --wait 120s
+
+      # O overlay ci não recebe bump: ele testa as MESMAS tags que estão (ou vão estar) no overlay local.
+      - name: Usa as tags de imagem do overlay local
+        run: |
+          yq -i '.images = load("apps/l2/overlays/local/kustomization.yaml").images' apps/l2/overlays/ci/kustomization.yaml
+          yq '.images' apps/l2/overlays/ci/kustomization.yaml
+
+      - name: Aplica o overlay ci
+        run: kubectl apply -k apps/l2/overlays/ci
+
+      - name: Espera tudo ficar pronto
+        run: |
+          for d in postgres l2-api tools-api frontend; do
+            kubectl -n "$NAMESPACE" rollout status "deploy/$d" --timeout=420s
+          done
+
+      - name: Smoke test
+        run: ./tests/smoke.sh
+
+      - name: Estado do cluster (em caso de falha)
+        if: failure()
+        run: |
+          kubectl -n "$NAMESPACE" get all,pvc,netpol
+          kubectl -n "$NAMESPACE" describe pods | tail -n 120
+          for d in postgres l2-api tools-api frontend; do
+            echo "--- logs $d"; kubectl -n "$NAMESPACE" logs "deploy/$d" --tail=60 || true
+          done
