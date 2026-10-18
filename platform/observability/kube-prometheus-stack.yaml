@@ -40,6 +40,9 @@ spec:
             ruleSelectorNilUsesHelmValues: false
             # Recebe as métricas que o Tempo gera a partir dos traces (service graph, latência por span).
             enableRemoteWriteReceiver: true
+            # Guarda os exemplars (traceID) que chegam junto, sem isso eles são descartados.
+            enableFeatures:
+              - exemplar-storage
             resources:
               requests:
                 cpu: 100m
@@ -64,6 +67,12 @@ spec:
             datasources:
               alertmanager:
                 enabled: false
+              # Clicar num exemplar abre o trace no Tempo. O label é o que o metrics-generator
+              # do Tempo grava em cada exemplar.
+              exemplarTraceIdDestinations:
+                datasourceUid: tempo
+                traceIdLabelName: traceID
+                urlDisplayLabel: Abrir trace no Tempo
             dashboards:
               enabled: true
               label: grafana_dashboard

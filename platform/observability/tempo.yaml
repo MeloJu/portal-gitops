@@ -30,7 +30,12 @@ spec:
                   endpoint: 0.0.0.0:4318
           metricsGenerator:
             enabled: true
-            remoteWriteUrl: http://kps-prometheus.observability:9090/api/v1/write
+            storage:
+              # Com `remote_write` aqui o chart ignora `remoteWriteUrl`. `send_exemplars` leva o
+              # traceID de cada ponto da latência por span, e é isso que liga o p95 ao trace.
+              remote_write:
+                - url: http://kps-prometheus.observability:9090/api/v1/write
+                  send_exemplars: true
           # Só habilitar o generator não basta: os processadores são ligados por tenant. Sem isto o
           # painel "Mapa de serviços" fica vazio (traefik -> l2-api -> postgres).
           overrides:

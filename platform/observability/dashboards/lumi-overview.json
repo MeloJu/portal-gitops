@@ -264,6 +264,16 @@
             "type": "prometheus",
             "uid": "prometheus"
           }
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(traces_spanmetrics_latency_bucket{service=\"l2-api\",span_kind=\"SPAN_KIND_SERVER\",span_name!~\".*/actuator.*\"}[1m])))",
+          "legendFormat": "p95 (traces)",
+          "refId": "D",
+          "exemplar": true,
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          }
         }
       ],
       "fieldConfig": {
@@ -273,7 +283,31 @@
             "lineWidth": 2,
             "fillOpacity": 10
           }
-        }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "p95 (traces)"
+            },
+            "properties": [
+              {
+                "id": "custom.lineStyle",
+                "value": {
+                  "fill": "dash",
+                  "dash": [
+                    10,
+                    10
+                  ]
+                }
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              }
+            ]
+          }
+        ]
       },
       "options": {
         "legend": {
@@ -283,7 +317,8 @@
         "tooltip": {
           "mode": "multi"
         }
-      }
+      },
+      "description": "p50/p95/p99 vêm do Micrometer (/actuator/prometheus). A série tracejada é o p95 calculado pelo Tempo a partir dos spans da l2-api: os pontos (losangos) são exemplars e abrem o trace daquela requisição."
     },
     {
       "id": 7,
