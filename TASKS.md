@@ -309,20 +309,28 @@ Actions pinadas **por SHA com comentário de versão**, `permissions: contents: 
 
 Helm via ArgoCD em `platform/observability/`.
 
-- [ ] **O1 · P0 · M — OTel Collector** (receiver OTLP gRPC/HTTP → Tempo; processor para **descartar spans de probe** da 8081; atributo `deployment.environment`). Service acessível pelo Ingress em `/otlp` (A8).
-- [ ] **O2 · P0 · M — Tempo** (PVC) e **kube-prometheus-stack** (Prometheus + Grafana + `ServiceMonitor`).
-- [ ] **O3 · P0 · S — Habilitar OTel na API** (A4): `OTEL_SDK_DISABLED=false`, `OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector.<ns>:4318`, `OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf`, `OTEL_TRACES_SAMPLER=parentbased_traceidratio` (`1.0` na demo); manter `OTEL_METRICS_EXPORTER=none`. **Não** adicionar `Authorization` à allowlist de headers (`SECURITY.md` §8).
+- [x] **O1 · P0 · M — OTel Collector** (receiver OTLP gRPC/HTTP → Tempo; processor para **descartar spans de probe** da 8081; atributo `deployment.environment`). Service acessível pelo Ingress em `/otlp` (A8).
+  ✅ *Feito:* Collector (contrib) com `memory_limiter`, filtro dos spans de `/actuator` e export para o Tempo. Ver [`docs/observabilidade.md`](docs/observabilidade.md).
+- [x] **O2 · P0 · M — Tempo** (PVC) e **kube-prometheus-stack** (Prometheus + Grafana + `ServiceMonitor`).
+  ✅ *Feito:* Tempo 1.24.4 (PVC, service graph + span metrics) e kube-prometheus-stack 92.10.1 (sem Alertmanager).
+- [x] **O3 · P0 · S — Habilitar OTel na API** (A4): `OTEL_SDK_DISABLED=false`, `OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector.<ns>:4318`, `OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf`, `OTEL_TRACES_SAMPLER=parentbased_traceidratio` (`1.0` na demo); manter `OTEL_METRICS_EXPORTER=none`. **Não** adicionar `Authorization` à allowlist de headers (`SECURITY.md` §8).
+  ✅ *Feito:* OTel ligado na API pelo `l2-config.env`; trace verificado: Traefik → `GET /r/{code}` → `SELECT`/`UPDATE`/`INSERT` no Postgres.
 - [ ] **O4 · P0 · S — Scrape:** `ServiceMonitor` da API na **8081** `/actuator/prometheus`; métricas do Traefik.
-- [ ] **O5 · P1 · S — Histograma de latência:** `MANAGEMENT_METRICS_DISTRIBUTION_PERCENTILESHISTOGRAM_HTTP_SERVER_REQUESTS=true` (sem isso só há média, não p95/p99).
-- [ ] **O6 · P0 · M — Grafana provisionado:** datasources Prometheus + Tempo e dashboards como **ConfigMap com JSON versionado** em `platform/observability/dashboards/`. Senha admin em SealedSecret.
-- [ ] **O7 · P0 · L — Dashboard "Lumi — Visão geral":**
+  ◐ *Parcial:* `ServiceMonitor` da API na 8081 (`up=1`). **Falta** métricas do Traefik.
+- [x] **O5 · P1 · S — Histograma de latência:** `MANAGEMENT_METRICS_DISTRIBUTION_PERCENTILESHISTOGRAM_HTTP_SERVER_REQUESTS=true` (sem isso só há média, não p95/p99).
+  ✅ *Feito:* histograma ligado (p50 4 ms / p95 13 ms / p99 40 ms sob carga). O nome da variável é `PERCENTILESHISTOGRAM`; com `PERCENTILES_HISTOGRAM` a API não sobe.
+- [x] **O6 · P0 · M — Grafana provisionado:** datasources Prometheus + Tempo e dashboards como **ConfigMap com JSON versionado** em `platform/observability/dashboards/`. Senha admin em SealedSecret.
+  ✅ *Feito:* Grafana com datasources Prometheus e Tempo, senha fora do Git, dashboards por ConfigMap (sidecar). `http://grafana.localhost`.
+- [x] **O7 · P0 · L — Dashboard "Lumi — Visão geral":**
   - **Cliques/Viagens:** `rate(l2_travels_total[1m])` por `bot`; links criados; acumulado;
   - **Ameaças bloqueadas** por `reason` (inclui `RATE_LIMIT`);
   - **Latência** p50/p95/p99 por rota e **taxa de erro 5xx**;
   - **Escala:** réplicas do HPA × CPU (a cena do loop de cliques);
   - **Saúde:** pods prontos, JVM heap, reinícios, Postgres (ver O9);
   - painel de **traces** (Tempo) e link métrica→trace (exemplars) para o "momento de prova".
+  ✅ *Feito:* dashboard "Lumi — Visão geral" (13 painéis), todos com dado sob carga, incluindo o mapa de serviços user → traefik → l2-api → postgres.
 - [ ] **O8 · P1 · L — Span do frontend:** OTel JS no browser (X4) enviando para `/otlp`; conferir no Tempo um trace **browser → l2-api → JDBC (banco)**.
+  ◐ *Parcial:* o span de borda (Traefik) já abre o trace. **Falta** o span do browser (`/otlp` + X4 no `portal-app`).
 - [ ] **O9 · P2 · M — `postgres_exporter`** (sidecar) para métricas do banco (o CNPG daria isso de graça; aqui é manual).
 - [ ] **O10 · P2 · M — Alertas** (erro 5xx, p95, crashloop) e/ou Loki com logs correlacionados por `trace_id`.
 
