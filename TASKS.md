@@ -8,7 +8,7 @@ adaptando o desafio de referência [`k8s-postgrest-challenge`](https://github.co
 > Repo de destino: `https://github.com/MeloJu/portal-gitops`. A árvore abaixo usa o layout "l2-gitops" combinado.
 > **Copiloto de IA:** o enunciado do desafio cita o Kiro, mas a organização liberou o **Claude** no lugar. O uso é registrado em `docs/uso-do-claude.md` (critério "Uso do copiloto", 10% da nota).
 > **Escopo atual:** só o cluster **local**. O ambiente Oracle (e o que depende dele: Let's Encrypt, SealedSecret de produção, Terraform) foi adiado.
-> **Progresso:** 39 de 62 tasks feitas · faltam 18 no escopo atual (P0: 0 · P1: 10 · P2: 8) · 5 adiadas (Oracle/Terraform). Atualizado a cada PR que fecha task.
+> **Progresso:** 41 de 62 tasks feitas · faltam 16 no escopo atual (P0: 0 · P1: 8 · P2: 8) · 5 adiadas (Oracle/Terraform). Atualizado a cada PR que fecha task.
 > **Status:** M1 e a plataforma local (P1–P6) feitos e mergeados na `develop`; G1–G4 feitos. Próximo: observabilidade (O1–O7). Legenda das notas: ✅ feito · ◐ parcial · ⏸ adiado.
 > Legenda: **P0** = sem isso não há demo · **P1** = nota alta · **P2** = diferencial. Tamanho: **S** (<1h) · **M** (1–3h) · **L** (>3h).
 
@@ -335,8 +335,8 @@ Helm via ArgoCD em `platform/observability/`.
   - **Saúde:** pods prontos, JVM heap, reinícios, Postgres (ver O9);
   - painel de **traces** (Tempo) e link métrica→trace (exemplars) para o "momento de prova".
   ✅ *Feito:* dashboard "Lumi — Visão geral" (13 painéis), todos com dado sob carga, incluindo o mapa de serviços user → traefik → l2-api → postgres.
-- [ ] **O8 · P1 · L — Span do frontend:** OTel JS no browser (X4) enviando para `/otlp`; conferir no Tempo um trace **browser → l2-api → JDBC (banco)**.
-  ◐ *Parcial:* o span de borda (Traefik) já abre o trace. **Falta** o span do browser (`/otlp` + X4 no `portal-app`).
+- [x] **O8 · P1 · L — Span do frontend:** OTel JS no browser (X4) enviando para `/otlp`; conferir no Tempo um trace **browser → l2-api → JDBC (banco)**.
+  ✅ *Feito:* o trace começa no **navegador**: num Chromium headless real contra o cluster, 6 de 6 chamadas à API saem com `traceparent`, e o Tempo mostra um único trace `l2-frontend` → `traefik` → `l2-api` → `SELECT l2.links`. Reproduzível com `./scripts/check-browser-trace.sh`.
 - [ ] **O9 · P2 · M — `postgres_exporter`** (sidecar) para métricas do banco (o CNPG daria isso de graça; aqui é manual).
 - [ ] **O10 · P2 · M — Alertas** (erro 5xx, p95, crashloop) e/ou Loki com logs correlacionados por `trace_id`.
 
@@ -360,7 +360,8 @@ Helm via ArgoCD em `platform/observability/`.
   ✅ *Feito:* `images.yml` roda depois dos testes (`needs`), o Trivy barra CRITICAL, publica as 3 imagens e **abre sozinho o PR de bump com auto-merge**. Validado de ponta a ponta no merge do portal-app #70 (`6ff4d6b`): CI verde → 3 imagens no GHCR → PR #13 aberto pelo workflow → 5 checks → auto-merge → ArgoCD trocou as 3 imagens para `sha-6ff4d6b` → rollouts concluídos, sem nenhum comando manual. Ver o fluxo completo em [`docs/ci-cd.md`](docs/ci-cd.md).
 - [x] **X3 · P1 · S — Probes:** confirmar `/actuator/health/liveness|readiness` na 8081 com `MANAGEMENT_ENDPOINT_HEALTH_PROBES_ENABLED=true`; **manter o banco fora do grupo readiness** (§3.1 ⑥).
   ✅ *Feito:* verificado sem mudar o `portal-app`: `/actuator/health/readiness` responde `UP` na 8081, o banco fica fora do grupo readiness (padrão do Spring) e o ConfigMap seta `MANAGEMENT_ENDPOINT_HEALTH_PROBES_ENABLED=true`.
-- [ ] **X4 · P1 · L — OTel no browser** (`@opentelemetry/sdk-trace-web` + fetch instrumentation), exportando OTLP/HTTP para `/otlp` (mesma origem, sem CORS) e propagando `traceparent` no `api/client.ts`.
+- [x] **X4 · P1 · L — OTel no browser** (`@opentelemetry/sdk-trace-web` + fetch instrumentation), exportando OTLP/HTTP para `/otlp` (mesma origem, sem CORS) e propagando `traceparent` no `api/client.ts`.
+  ✅ *Feito:* portal-app #71 + #72: `WebTracerProvider` + `FetchInstrumentation` exportando para `/otlp/v1/traces` (mesma origem); inicializado num módulo importado **primeiro** no `main.tsx`, porque o router dispara o `/api/me` já na importação. +22 KiB gzip; 272 testes, incluindo o de regressão da ordem dos imports.
 - [ ] **X5 · P2 · S — Seed de demo:** usuário e links de exemplo (ou script).
 
 ### Épico Q — Docs, uso do Claude e pitch (entregáveis)
