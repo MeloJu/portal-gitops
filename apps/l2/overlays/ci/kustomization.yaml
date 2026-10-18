@@ -17,20 +17,16 @@ images:
   - name: ghcr.io/meloju/portal-app-tools-api
     newTag: sha-pending
 
+configMapGenerator:
+  - name: l2-config
+    behavior: merge
+    literals:
+      - PUBLIC_BASE_URL=http://localhost
+      - SESSION_COOKIE_SECURE=false
+      # Sem Collector no kind: o agente só geraria erro de exportação no log.
+      - OTEL_SDK_DISABLED=true
+
 patches:
-  - target:
-      kind: ConfigMap
-      name: l2-config
-    patch: |-
-      - op: replace
-        path: /data/PUBLIC_BASE_URL
-        value: http://localhost
-      - op: replace
-        path: /data/SESSION_COOKIE_SECURE
-        value: "false"
-      - op: replace
-        path: /data/OTEL_SDK_DISABLED
-        value: "true"
   - target:
       kind: Ingress
       name: l2

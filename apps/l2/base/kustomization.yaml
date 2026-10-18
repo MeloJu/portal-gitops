@@ -4,7 +4,6 @@ kind: Kustomization
 # Ordem lógica; o ArgoCD aplica pelo grafo de dependências e o namespace sai primeiro.
 resources:
   - namespace.yaml
-  - configmap.yaml
   - postgres-pvc.yaml
   - postgres.yaml
   - api.yaml
@@ -13,6 +12,16 @@ resources:
   - tools-api.yaml
   - frontend.yaml
   - ingress.yaml
+
+# ConfigMap com hash no nome: mudar um valor reinicia a API sozinho (ver l2-config.env).
+configMapGenerator:
+  - name: l2-config
+    envs:
+      - l2-config.env
+    options:
+      labels:
+        app.kubernetes.io/name: l2-config
+        app.kubernetes.io/part-of: l2
 
 # O Secret `l2-secrets` NÃO está aqui de propósito. Cada overlay fornece o seu:
 #   local  -> criado pelo scripts/bootstrap-local.sh (fora do Git)

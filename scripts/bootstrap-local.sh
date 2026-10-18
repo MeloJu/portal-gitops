@@ -46,7 +46,8 @@ kubectl -n argocd rollout status deployment/argocd-repo-server --timeout=300s
 kubectl -n argocd rollout status statefulset/argocd-application-controller --timeout=300s
 
 echo "==> Secret da aplicação (fora do Git)"
-kubectl create namespace "$NAMESPACE" --dry-run=client -o yaml | kubectl apply -f - >/dev/null
+# Só cria se faltar: depois do primeiro sync o namespace é do ArgoCD (com as labels de Pod Security).
+kubectl get namespace "$NAMESPACE" >/dev/null 2>&1 || kubectl create namespace "$NAMESPACE" >/dev/null
 if kubectl -n "$NAMESPACE" get secret l2-secrets >/dev/null 2>&1; then
   # Não rotacionar: a senha do banco só é aplicada quando o volume do Postgres está vazio.
   echo "    l2-secrets já existe, mantendo"
@@ -59,7 +60,7 @@ else
 fi
 
 echo "==> Senha do Grafana (fora do Git)"
-kubectl create namespace observability --dry-run=client -o yaml | kubectl apply -f - >/dev/null
+kubectl get namespace observability >/dev/null 2>&1 || kubectl create namespace observability >/dev/null
 if kubectl -n observability get secret grafana-admin >/dev/null 2>&1; then
   echo "    grafana-admin já existe, mantendo"
 else
