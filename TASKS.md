@@ -311,7 +311,7 @@ Actions pinadas **por SHA com comentário de versão**, `permissions: contents: 
 ### Épico T — Terraform / Oracle Cloud (`terraform/`)
 
 - [ ] **T1 · P1 · M — Rede e VM:** VCN, subnet, security list (22 restrito, 80, 443; **não** expor 6443/8081), instância **Ampere A1.Flex** (Free Tier), chave SSH.
-  ◐ *Parcial:* Ambiente **Azure** (substitui o Oracle, que foi descartado): ver [`terraform/README.md`](terraform/README.md). VNet, IP público estático com DNS grátis, NSG na **sub-rede** (só 80/443; 22 só do seu IP; 6443/Actuator/Grafana fechados) e VM `Standard_B2ms`. `fmt`, `validate`, validações de variável e Trivy limpos. **Falta o `apply` numa conta real** (precisa das suas credenciais e da checagem de região/tamanho).
+  ◐ *Parcial:* Ambiente **Azure** (substitui o Oracle, que foi descartado): ver [`terraform/README.md`](terraform/README.md). VNet, IP público estático com DNS grátis, NSG na **sub-rede** (só 80/443; 22 só do seu IP; 6443/Actuator/Grafana fechados) e VM `Standard_B2ms`. `fmt`, `validate`, validações de variável e Trivy limpos. **Falta o `apply` numa conta real** (precisa das suas credenciais e da checagem de região/tamanho). **Atualização (out/2026):** `terraform plan` rodado contra a assinatura real, autenticado: **10 a criar, 0 a alterar, 0 a destruir**. A `B2ms` **não existe em `brazilsouth`**; o padrão passou a `Standard_D2s_v4` (única de 2 vCPU/8 GB com quota nesta assinatura). Provedores de recurso registrados. **Falta só o `apply`.**
 - [ ] **T2 · P1 · M — K3s via cloud-init** (Traefik habilitado) e saída do `kubeconfig`; opcionalmente já instala o ArgoCD e aplica o `bootstrap/`.
   ◐ *Parcial:* K3s `v1.35.5+k3s1` (a mesma do k3d) instalado por cloud-init, aprovado pelo `cloud-init schema` oficial; kubeconfig por túnel SSH (a 6443 não é exposta). **Falta provar numa VM de verdade.** O ArgoCD e o app-of-apps na VM dependem do overlay `azure` e do `bootstrap-azure.sh` (abaixo).
 - [x] **T3 · P1 · S — Estado e segredos:** backend remoto (bucket OCI) ou local **fora do Git**; variáveis sensíveis em `*.tfvars` ignorado; `terraform.tfvars.example` versionado.
@@ -466,7 +466,7 @@ O plano estudantil da Azure virou o ambiente "nuvem". Em vez do Oracle, a VM fic
 
 | # | Task | Estado | Observação |
 | --- | --- | --- | --- |
-| AZ1 | Terraform da VM (T1–T4, C4) | ◐ escrito e validado, **não aplicado** | falta a sua conta; ver `terraform/README.md` |
+| AZ1 | Terraform da VM (T1–T4, C4) | ◐ `plan` real OK (10 a criar), **não aplicado** | falta o `apply` (gasta crédito: precisa de OK explícito); ver `terraform/README.md` |
 | AZ2 | Overlay `azure` do ArgoCD + `ClusterIssuer` Let's Encrypt | ⏳ | host = o `fqdn` do Terraform; `SESSION_COOKIE_SECURE=true` |
 | AZ3 | `scripts/bootstrap-azure.sh` (ArgoCD + app-of-apps na VM) | ⏳ | parecido com o `bootstrap-local.sh`, via SSH |
 | AZ4 | SealedSecret do `l2-secrets` + backup da chave | ⏳ | primeiro uso real do Sealed Secrets (`docs/sealed-secrets.md`) |
