@@ -58,6 +58,10 @@ Pegadinha: o router do app é criado no nível do módulo e dispara o `/api/me` 
 ligada no corpo do `main.tsx`, essa primeira chamada saía **sem** `traceparent`. A inicialização fica num módulo
 importado como primeira linha do `main.tsx`, com teste de regressão.
 
+Outra: com o envio padrão do SDK a cada 5 s, quem saía da página antes do próximo envio levava os spans junto (o
+fluxo do link curto é exatamente esse). O frontend envia a cada **1 s**, e o `check-browser-trace.sh` exige o span do
+navegador também no trace da página que a pessoa deixou.
+
 ## O que foi verificado no cluster
 
 Um `GET /r/nebulosa` gerou este trace no Tempo:

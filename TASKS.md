@@ -8,7 +8,7 @@ adaptando o desafio de referência [`k8s-postgrest-challenge`](https://github.co
 > Repo de destino: `https://github.com/MeloJu/portal-gitops`. A árvore abaixo usa o layout "l2-gitops" combinado.
 > **Copiloto de IA:** o enunciado do desafio cita o Kiro, mas a organização liberou o **Claude** no lugar. O uso é registrado em `docs/uso-do-claude.md` (critério "Uso do copiloto", 10% da nota).
 > **Escopo atual:** só o cluster **local**. O ambiente Oracle (e o que depende dele: Let's Encrypt, SealedSecret de produção, Terraform) foi adiado.
-> **Progresso:** 41 de 62 tasks feitas · faltam 16 no escopo atual (P0: 0 · P1: 8 · P2: 8) · 5 adiadas (Oracle/Terraform). Atualizado a cada PR que fecha task.
+> **Progresso:** 44 de 62 tasks feitas · faltam 13 no escopo atual (P0: 0 · P1: 5 · P2: 8) · 5 adiadas (Oracle/Terraform). Atualizado a cada PR que fecha task.
 > **Status:** M1 e a plataforma local (P1–P6) feitos e mergeados na `develop`; G1–G4 feitos. Próximo: observabilidade (O1–O7). Legenda das notas: ✅ feito · ◐ parcial · ⏸ adiado.
 > Legenda: **P0** = sem isso não há demo · **P1** = nota alta · **P2** = diferencial. Tamanho: **S** (<1h) · **M** (1–3h) · **L** (>3h).
 
@@ -270,7 +270,8 @@ Estética da referência: labels `app.kubernetes.io/*`, comentário explicando o
   - cada overlay com bloco `images:` das 3 imagens (é o que o `yq` do release edita).
   *Pronto quando:* `kustomize build apps/l2/overlays/{local,oracle,ci}` renderiza sem erro.
   ✅ *Feito:* `local` e `ci` prontos e validados. `oracle` adiado junto com o ambiente.
-- [ ] **A11 · P1 · S — `network-policies.yaml`** (ver S2) e **`PodDisruptionBudget`** da API.
+- [x] **A11 · P1 · S — `network-policies.yaml`** (ver S2) e **`PodDisruptionBudget`** da API.
+  ✅ *Feito:* NetworkPolicies (ver S2) e `PodDisruptionBudget` da API com `maxUnavailable: 1` (e não `minAvailable: 1`, que com uma réplica travaria qualquer drain). O Postgres fica sem PDB de propósito: réplica única com volume RWO.
 - [ ] **A12 · P2 · M — GeoIP opcional:** `geoipupdate` (CronJob) gravando a `.mmdb` em PVC + `GEOIP_DB_PATH`. Licença MaxMind em SealedSecret; **a base nunca entra no Git**. Sem isso nada quebra, só ficam sem país.
 
 ### Épico C — CI do gitops (validação em PR)
@@ -344,9 +345,10 @@ Helm via ArgoCD em `platform/observability/`.
 
 - [x] **S1 · P0 · S — Pod Security `restricted`** no namespace `l2` (label). Todo pod precisa passar (nginx e tools-api: UID numérico + `emptyDir`; Postgres alpine: `runAsUser` do `postgres` + `fsGroup`).
   ✅ *Feito:* namespace `l2` com `enforce: restricted`; todos os pods passam. Prova: um `kubectl run` sem securityContext é **recusado** no `l2`.
-- [ ] **S2 · P1 · M — NetworkPolicies:** `default-deny` ingress **e egress**; Postgres só aceita da API; API só do Ingress/Prometheus; Collector só da API e do Ingress; **tools-api com egress só para internet pública** (bloquear CIDRs do cluster/nós e `169.254.169.254` — defesa em profundidade contra SSRF). K3s aplica; no `kind` do CI são declarativas (documentar).
-- [ ] **S3 · P1 · S — `automountServiceAccountToken: false`** e `ServiceAccount` dedicada por workload.
-  ◐ *Parcial:* `automountServiceAccountToken: false` em todos os pods da app. **Falta** `ServiceAccount` dedicada por workload.
+- [x] **S2 · P1 · M — NetworkPolicies:** `default-deny` ingress **e egress**; Postgres só aceita da API; API só do Ingress/Prometheus; Collector só da API e do Ingress; **tools-api com egress só para internet pública** (bloquear CIDRs do cluster/nós e `169.254.169.254` — defesa em profundidade contra SSRF). K3s aplica; no `kind` do CI são declarativas (documentar).
+  ✅ *Feito:* `apps/l2/base/network-policies.yaml`: deny-by-default de entrada **e** saída, DNS liberado, e só os fluxos da arquitetura. Verificado no K3s (kube-router aplica): app inteira funcionando (front, API, redirect, tools, scrape do Prometheus, traces); bloqueados com `ECONNREFUSED`: tools-api → Postgres, → Actuator, → `169.254.169.254` e → API do Kubernetes; frontend → Postgres. A tools-api só sai para IP público em 80/443 (testado: `https://example.com` → 200). Checkov passa **sem** a exceção do `CKV2_K8S_6`.
+- [x] **S3 · P1 · S — `automountServiceAccountToken: false`** e `ServiceAccount` dedicada por workload.
+  ✅ *Feito:* ServiceAccount própria para cada workload (`l2-api`, `frontend`, `tools-api`, `postgres`), com `automountServiceAccountToken: false` na SA e no pod. Verificado: cada pod roda com a sua, sem token.
 - [ ] **S4 · P2 · M — Digest nas imagens de terceiros** (nginx, postgres etc.), como o `hardening-producao.md` da referência.
   ◐ *Parcial:* Postgres fixado por digest; charts da plataforma por versão. As bases nginx/Playwright são do `portal-app` (Dockerfiles de lá).
 - [ ] **S5 · P2 · M — Backup do Postgres** (`CronJob` com `pg_dump` para volume/bucket) — substitui o que o CNPG daria.
