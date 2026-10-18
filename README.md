@@ -26,12 +26,10 @@ troca a tag das imagens. Do commit ao deploy, sem `kubectl` manual.
 Projeto do hackathon *Portal dos Links* (CloudOps Bootcamp). O plano completo, as decisões de
 arquitetura e os riscos estão em [`TASKS.md`](TASKS.md).
 
-> **Estado atual.** ✅ pronto e validado em cluster real · 🚧 planejado, ver [`TASKS.md`](TASKS.md)
->
-> ✅ OpenTelemetry → Tempo, Prometheus e Grafana com o dashboard da Lumi (trace Traefik → API → Postgres) · ✅ TLS self-signed (cert-manager) e IP real do cliente no Traefik · ✅ Sealed Secrets (controller + scripts) · ✅ aplicação no Kubernetes (API, banco, frontend, tools-api, Ingress, HPA) · ✅ ArgoCD sincronizando o repositório ·
-> ✅ CI de PR (kustomize, kubeconform, yamllint, gitleaks) ·
-> 🚧 imagens publicadas pelo `portal-app` com bump automático · 🚧 OpenTelemetry, Tempo, Prometheus e Grafana ·
-> 🚧 NetworkPolicies · 🚧 ambiente Azure: o Terraform está escrito e validado ([`terraform/`](terraform/README.md)), falta aplicar
+> **Estado do projeto.** Os componentes locais e o fluxo GitOps foram verificados em cluster em
+> execuções anteriores; a disponibilidade atual depende da infraestrutura. O Azure ainda não foi
+> aplicado. Capturas reais e o roteiro da apresentação: [`docs/evidencias/`](docs/evidencias/README.md)
+> e [`PITCH.md`](PITCH.md).
 
 ## 🏗️ Arquitetura
 
@@ -254,6 +252,14 @@ portal-gitops/
   overlay em `apps/l2/overlays/<env>/kustomization.yaml`; o ArgoCD detecta o commit e sincroniza.
   Nenhum job de CI toca o cluster. 🚧 (depende das tasks X1/X2 do [`TASKS.md`](TASKS.md))
 - **Smoke test em cluster efêmero** (`kind` + `pytest`, como no desafio de referência) 🚧.
+
+## 🎤 Apresentação e evidências
+
+- [`PITCH.md`](PITCH.md): roteiro cronometrado de 15 minutos, com falas, transições e plano
+  alternativo para falhas.
+- [`docs/evidencias/README.md`](docs/evidencias/README.md): fontes e critérios para capturar
+  provas reais de Actions, ArgoCD, Grafana/HPA, Tempo e alertas. As capturas dependentes de
+  infraestrutura ainda precisam ser feitas quando os serviços estiverem disponíveis.
 
 ## 🔀 GitFlow
 
