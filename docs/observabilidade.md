@@ -41,6 +41,23 @@ fora do Git.
 - **Métricas**: o Prometheus coleta `/actuator/prometheus` na porta **8081** pelo `ServiceMonitor`
   `l2-api`. O Actuator nunca passa pelo Ingress.
 
+## Trace a partir do navegador
+
+O frontend (portal-app, `src/telemetry.ts`) instrumenta todo `fetch` e manda o `traceparent` para a API. Num Chromium
+headless real contra o cluster (`./scripts/check-browser-trace.sh`), **6 de 6** chamadas à API saíram com `traceparent`,
+e o Tempo mostra um **único trace** desde o clique:
+
+```
+l2-frontend | GET                          (navegador)
+traefik     | GET · ReverseProxy           (Ingress)
+l2-api      | GET /api/links               (Spring)
+l2-api      | LinkRepository.findByOwnerId → SELECT l2.links   (Postgres)
+```
+
+Pegadinha: o router do app é criado no nível do módulo e dispara o `/api/me` já ao ser importado; com a telemetria
+ligada no corpo do `main.tsx`, essa primeira chamada saía **sem** `traceparent`. A inicialização fica num módulo
+importado como primeira linha do `main.tsx`, com teste de regressão.
+
 ## O que foi verificado no cluster
 
 Um `GET /r/nebulosa` gerou este trace no Tempo:
@@ -115,7 +132,6 @@ Funciona em HTTP e em HTTPS (dois Ingress, porque o Traefik só casa HTTPS num r
 
 ## Ainda não feito
 
-- **Span do browser**: a rota `/otlp` já existe; falta o OTel JS no `portal-app` (X4) para o trace começar no navegador.
 - **Métricas do Postgres** (`postgres_exporter`).
 - **Exemplars** (pular de um ponto do gráfico para o trace): o agente OTel não alimenta os exemplars do
   Micrometer; fica para depois.
