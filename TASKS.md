@@ -8,7 +8,7 @@ adaptando o desafio de referência [`k8s-postgrest-challenge`](https://github.co
 > Repo de destino: `https://github.com/MeloJu/portal-gitops`. A árvore abaixo usa o layout "l2-gitops" combinado.
 > **Copiloto de IA:** o enunciado do desafio cita o Kiro, mas a organização liberou o **Claude** no lugar. O uso é registrado em `docs/uso-do-claude.md` (critério "Uso do copiloto", 10% da nota).
 > **Escopo atual:** só o cluster **local**. O ambiente Oracle (e o que depende dele: Let's Encrypt, SealedSecret de produção, Terraform) foi adiado.
-> **Progresso:** 49 de 62 tasks feitas · faltam 8 no escopo atual (P0: 0 · P1: 3 · P2: 5) · 5 adiadas (Oracle/Terraform). Atualizado a cada PR que fecha task.
+> **Progresso:** 51 de 62 tasks feitas · faltam 6 no escopo atual (P0: 0 · P1: 3 · P2: 3) · 5 adiadas (Oracle/Terraform). Atualizado a cada PR que fecha task.
 > **Status:** M1 e a plataforma local (P1–P6) feitos e mergeados na `develop`; G1–G4 feitos. Próximo: observabilidade (O1–O7). Legenda das notas: ✅ feito · ◐ parcial · ⏸ adiado.
 > Legenda: **P0** = sem isso não há demo · **P1** = nota alta · **P2** = diferencial. Tamanho: **S** (<1h) · **M** (1–3h) · **L** (>3h).
 
@@ -287,7 +287,8 @@ Actions pinadas **por SHA com comentário de versão**, `permissions: contents: 
   `kubectl apply -k apps/l2/overlays/ci` → espera `Ready` → `pytest tests/`: health da API, cadastro/login, criar link, `GET /r/{code}` = 302 com `Referrer-Policy: no-referrer`, `/actuator/prometheus` com `l2_travels_total`, **dados sobrevivem a deletar o pod do Postgres**. Despeja logs em caso de falha.
   *Valor extra:* prova que a tag do overlay existe de verdade no GHCR.
   ✅ *Feito:* `.github/workflows/smoke-e2e.yml` + `tests/smoke.sh`: cluster **kind efêmero** a cada PR/push (binário com checksum, nó 1.35 por digest), overlay `ci` com as **mesmas tags do overlay `local`**, 13 verificações (readiness, cadastro, link, `302` com cabeçalhos de privacidade, métricas na 8081, **persistência após destruir o pod do Postgres**, SPA e nginx → tools-api). Passou em 1 min 43 s e virou check **obrigatório**: um PR de bump só entra se a imagem subir num cluster de verdade. Na primeira execução pegou um bug real: os scripts estavam sem bit de execução no Git (editados no Windows).
-- [ ] **C3 · P2 · S — Dependabot/Renovate** para Actions e charts.
+- [x] **C3 · P2 · S — Dependabot/Renovate** para Actions e charts.
+  ✅ *Feito:* `.github/dependabot.yml`: GitHub Actions (fixadas por SHA), um PR agrupado por semana na `develop`. O check Gitflow passou a aceitar branches `dependabot/*` (sem isso todo PR do Dependabot seria recusado). Charts Helm do ArgoCD ficam à mão (o Dependabot não os suporta).
 - [ ] **C4 · P2 · M — `terraform fmt/validate` + `tflint`/`tfsec`** no mesmo workflow quando `terraform/**` mudar.
   ⏸ *Adiado:* depende do `terraform/`, que foi adiado com o ambiente Oracle.
 
@@ -353,8 +354,8 @@ Helm via ArgoCD em `platform/observability/`.
   ✅ *Feito:* `apps/l2/base/network-policies.yaml`: deny-by-default de entrada **e** saída, DNS liberado, e só os fluxos da arquitetura. Verificado no K3s (kube-router aplica): app inteira funcionando (front, API, redirect, tools, scrape do Prometheus, traces); bloqueados com `ECONNREFUSED`: tools-api → Postgres, → Actuator, → `169.254.169.254` e → API do Kubernetes; frontend → Postgres. A tools-api só sai para IP público em 80/443 (testado: `https://example.com` → 200). Checkov passa **sem** a exceção do `CKV2_K8S_6`.
 - [x] **S3 · P1 · S — `automountServiceAccountToken: false`** e `ServiceAccount` dedicada por workload.
   ✅ *Feito:* ServiceAccount própria para cada workload (`l2-api`, `frontend`, `tools-api`, `postgres`), com `automountServiceAccountToken: false` na SA e no pod. Verificado: cada pod roda com a sua, sem token.
-- [ ] **S4 · P2 · M — Digest nas imagens de terceiros** (nginx, postgres etc.), como o `hardening-producao.md` da referência.
-  ◐ *Parcial:* Postgres fixado por digest; charts da plataforma por versão. As bases nginx/Playwright são do `portal-app` (Dockerfiles de lá).
+- [x] **S4 · P2 · M — Digest nas imagens de terceiros** (nginx, postgres etc.), como o `hardening-producao.md` da referência.
+  ✅ *Feito:* Postgres e o sidecar do exporter por digest (manifest); as 3 imagens da aplicação agora também: o bump automático grava `newTag` **e** `digest` (portal-app #74) e o Kustomize gera `imagem:sha-xxxxxxx@sha256:…`. Verificado: o `imageID` do pod é idêntico ao digest publicado no GHCR, ou seja, o cluster roda exatamente o que o Trivy escaneou. O Checkov manteve o skip do `CKV_K8S_43` nos Deployments só porque ele lê o manifest da base (sem o digest que o overlay injeta).
 - [x] **S5 · P2 · M — Backup do Postgres** (`CronJob` com `pg_dump` para volume/bucket) — substitui o que o CNPG daria.
   ✅ *Feito:* `CronJob` diário de `pg_dump` como `l2_app`, validado com `pg_restore --list`, retenção de 7, NetworkPolicy própria. **Ensaio de restauração** num banco novo: as 5 tabelas idênticas ao original (18.453 viagens). O smoke e2e roda um backup a cada PR. Ver [`docs/backup.md`](docs/backup.md).
 - [ ] **S6 · P1 · S — `docs/hardening.md`** no molde da referência (o quê, por quê, como verificar).
@@ -436,3 +437,20 @@ Helm via ArgoCD em `platform/observability/`.
 - [ ] Personagem (Lumi), identidade e features exclusivas apresentadas
 - [ ] README: ideia, como rodar, como o Claude foi usado (`docs/uso-do-claude.md`)
 - [ ] Pitch de 15 min ensaiado com `demo-load.sh`
+
+## 11. Para delegar — o que falta (6 tasks)
+
+Cada item diz o que entregar, como provar que está pronto e o que já existe para reaproveitar. Antes de começar:
+`CLAUDE.md` (regras do projeto), `docs/ci-cd.md` (como um PR chega ao cluster) e `./scripts/bootstrap-local.sh`
+(sobe o cluster local). **Todo PR passa por 8 checks obrigatórios**, e a task só é marcada `[x]` depois de validada.
+
+| Task | Prio | Esforço | O que entregar | Pronto quando | Reaproveitar |
+| --- | --- | --- | --- | --- | --- |
+| **Q6** Roteiro do pitch | P1 | M | `docs/pitch.md`: 3 min portal/personagem · 8 min demo ao vivo · 2 min pipeline e Claude · 2 min perguntas, com o que falar e o comando de cada cena | alguém que não construiu consegue ensaiar o pitch só com o documento, e ele cabe em 15 min cronometrado | `scripts/demo-load.sh` (cenas `cliques` e `ameaca`), `scripts/check-browser-trace.sh`, dashboard "Lumi — Visão geral", `docs/ci-cd.md` |
+| **Q4** Evidências | P1 | S | `docs/evidencias/` com prints: ArgoCD `Synced`, pipeline verde (CI + PR de bump), Grafana com o HPA escalando, trace `l2-frontend → traefik → l2-api → Postgres` no Tempo, alerta disparado | cada print tem legenda do que prova; referenciados no README | dados reais: rode `demo-load.sh cliques` e `ameaca` antes de capturar |
+| **S6** `hardening.md` | P1 | S | `docs/hardening.md` no molde do `hardening-producao.md` do desafio de referência: o quê, por quê, como verificar | cada controle tem um comando de verificação que funciona | já feito e testado: PSA `restricted`, NetworkPolicies, SA sem token, Checkov, segredos (SealedSecret/gitleaks), rate limit em 2 camadas, `/otlp` em 4 camadas, digest, backup |
+| **X5** Seed de demo | P2 | S | decidir: o `demo-load.sh setup` já cria usuário e links; se bastar, só marcar a task e documentar | a demo começa com dados sem cadastro manual | `scripts/demo-load.sh setup` |
+| **A12** GeoIP | P2 | M | `CronJob` `geoipupdate` gravando a `GeoLite2-Country.mmdb` num PVC + `GEOIP_DB_PATH` no `l2-config.env` | viagens passam a ter país (painel de países) | **precisa de uma conta MaxMind (Account ID + License Key)**, que vai num SealedSecret. A base nunca entra no Git. Sem isso nada quebra: só ficam sem país |
+| **D5** Gate de promoção | P2 | M | PR `release/*` → `main` verificando que as 3 tags do overlay existem no GHCR; rollback = `git revert` do bump | depende de ter um overlay de produção | **adiada de fato**: sem ambiente `oracle` não há o que promover |
+
+Ordem sugerida: **Q6** e **Q4** primeiro (são o que a banca vê), depois **S6**.
