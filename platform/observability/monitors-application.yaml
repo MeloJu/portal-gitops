@@ -1,0 +1,33 @@
+# PodMonitors e ServiceMonitors da plataforma numa Application própria: o CRD só existe depois
+# que o kube-prometheus-stack instalou, e aplicados direto pelo `root` (sem retry) um cluster
+# novo ficaria com o app-of-apps inteiro em Failed. Aqui o retry cobre essa espera.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: observability-monitors
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: platform
+  source:
+    repoURL: https://github.com/MeloJu/portal-gitops.git
+    targetRevision: develop
+    path: platform/observability/monitors
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: observability
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      # O CRD PodMonitor pode ainda não existir na primeira passada (dry-run).
+      - SkipDryRunOnMissingResource=true
+    retry:
+      limit: 10
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 3m

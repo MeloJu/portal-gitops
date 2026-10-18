@@ -1,0 +1,26 @@
+# O Prometheus coleta as métricas do Traefik do K3s (kube-system) direto no pod, na porta
+# `metrics` (9100). Ela não está no Service do Traefik, então só é alcançável por dentro do
+# cluster (mesma regra do Actuator). PodMonitor porque não há Service que exponha essa porta.
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: traefik
+  namespace: observability
+  labels:
+    app.kubernetes.io/name: traefik
+    app.kubernetes.io/component: metrics
+    app.kubernetes.io/part-of: observability
+  annotations:
+    # O CRD vem do kube-prometheus-stack; na primeira passada ele pode ainda não existir.
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+spec:
+  namespaceSelector:
+    matchNames:
+      - kube-system
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: traefik
+  podMetricsEndpoints:
+    - port: metrics
+      path: /metrics
+      interval: 15s

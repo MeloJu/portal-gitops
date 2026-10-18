@@ -1,9 +1,10 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
-# Só as Applications; o conteúdo de dashboards/ é renderizado pela Application dos dashboards.
+# Só as Applications; o conteúdo de dashboards/ e monitors/ é renderizado pelas Applications deles.
 resources:
   - kube-prometheus-stack.yaml
   - tempo.yaml
   - otel-collector.yaml
   - dashboards-application.yaml
+  - monitors-application.yaml
