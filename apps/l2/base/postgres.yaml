@@ -63,6 +63,7 @@ spec:
         app.kubernetes.io/name: postgres
         app.kubernetes.io/part-of: l2
     spec:
+      serviceAccountName: postgres
       automountServiceAccountToken: false
       securityContext:
         # uid/gid 70 = usuário `postgres` da variante alpine (no Debian seria 999).

@@ -117,12 +117,11 @@ jobs:
       # HARD-FAIL: pods privilegiados, root, sem limites, sem probes, etc. barram o PR.
       # O que é inevitável por causa da imagem (uid fixo, tag em vez de digest, segredo por
       # ambiente) está justificado em `checkov.io/skipN` no próprio manifesto, com o motivo.
-      # CKV2_K8S_6 (NetworkPolicy) fica como aviso até a task S2; remover a flag quando ela entrar.
+      # Sem exceções na linha de comando: tudo que falhar barra o PR.
       - name: Checkov
         run: |
           docker run --rm -v "$PWD/rendered:/rl:ro" bridgecrew/checkov:3.2.500 \
-            -d /rl --framework kubernetes --compact --quiet \
-            --soft-fail-on CKV2_K8S_6
+            -d /rl --framework kubernetes --compact --quiet
 
   yamllint:
     name: yamllint
