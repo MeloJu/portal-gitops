@@ -80,6 +80,15 @@ spec:
                 secretKeyRef:
                   name: l2-secrets
                   key: JWT_SECRET
+            # Pepper dos códigos de verificação (mínimo 256 bits). As imagens novas do portal-app não
+            # sobem sem ele ("app.codes.pepper"). `optional: true` só para não derrubar uma imagem antiga
+            # enquanto o Secret do ambiente ainda não tem a chave: com a imagem nova, a falta dela é erro.
+            - name: APP_CODE_PEPPER
+              valueFrom:
+                secretKeyRef:
+                  name: l2-secrets
+                  key: APP_CODE_PEPPER
+                  optional: true
           # A imagem já usa -XX:MaxRAMPercentage=75: com limite de 768Mi o heap fica ~576Mi,
           # sobrando espaço para metaspace e threads. Abaixo de ~512Mi a JVM leva OOMKill.
           resources:

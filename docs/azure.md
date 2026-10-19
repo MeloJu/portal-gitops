@@ -131,6 +131,19 @@ portal-app (develop) ──CI/CD──► PR de bump ──► portal-gitops dev
 Mudar de `develop` para `main` num cluster que já roda exige reaplicar o `root` uma vez
 (`./scripts/bootstrap-azure.sh`), porque a Application `root` é criada à mão.
 
+## O que o `l2-secrets` precisa ter
+
+| Chave | Para quê | Obrigatória |
+| --- | --- | --- |
+| `DB_PASSWORD`, `POSTGRES_PASSWORD` | senha do banco (a role `l2_app` e o superuser) | sim |
+| `JWT_SECRET` | assina a sessão (≥ 256 bits) | sim |
+| `APP_CODE_PEPPER` | pepper dos códigos de verificação (≥ 256 bits); as imagens do `portal-app` **não sobem sem ele** | sim, a partir das imagens que o exigem |
+| `VT_API_KEY` | análise do VirusTotal | não |
+
+Uma chave nova entra com `kubeseal --merge-into` (sem trocar as outras), como na seção abaixo. Foi assim que o
+`APP_CODE_PEPPER` chegou: o `portal-app` passou a exigi-lo e todos os PRs de bump falharam no smoke test até o
+`portal-gitops` fornecê-lo, o que é exatamente o que esse check existe para pegar.
+
 ## Chave do VirusTotal (opcional)
 
 A tools-api só faz a análise de segurança de links (`POST /tools/scan`) se o `l2-secrets` tiver
