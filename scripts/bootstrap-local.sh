@@ -51,12 +51,20 @@ kubectl get namespace "$NAMESPACE" >/dev/null 2>&1 || kubectl create namespace "
 if kubectl -n "$NAMESPACE" get secret l2-secrets >/dev/null 2>&1; then
   # Não rotacionar: a senha do banco só é aplicada quando o volume do Postgres está vazio.
   echo "    l2-secrets já existe, mantendo"
+  # Uma chave que nasceu depois do cluster (o pepper dos códigos, exigido pelas imagens novas) é
+  # acrescentada sem tocar nas outras, para um cluster antigo não precisar ser recriado.
+  if [ -z "$(kubectl -n "$NAMESPACE" get secret l2-secrets -o jsonpath='{.data.APP_CODE_PEPPER}')" ]; then
+    echo "    acrescentando APP_CODE_PEPPER"
+    pepper="$(head -c 32 /dev/urandom | base64 | tr -d '\n' | base64 | tr -d '\n')"
+    kubectl -n "$NAMESPACE" patch secret l2-secrets --type merge -p "{\"data\":{\"APP_CODE_PEPPER\":\"${pepper}\"}}" >/dev/null
+  fi
 else
   rand() { head -c "$1" /dev/urandom | base64 | tr -d '=+/\n'; }
   kubectl -n "$NAMESPACE" create secret generic l2-secrets \
     --from-literal=POSTGRES_PASSWORD="$(rand 24)" \
     --from-literal=DB_PASSWORD="$(rand 24)" \
-    --from-literal=JWT_SECRET="$(head -c 32 /dev/urandom | base64 | tr -d '\n')"
+    --from-literal=JWT_SECRET="$(head -c 32 /dev/urandom | base64 | tr -d '\n')" \
+    --from-literal=APP_CODE_PEPPER="$(head -c 32 /dev/urandom | base64 | tr -d '\n')"
 fi
 
 echo "==> Senha do Grafana (fora do Git)"
