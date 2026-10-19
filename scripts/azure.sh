@@ -6,6 +6,7 @@
 #   ./scripts/azure.sh grafana   # Grafana em http://localhost:3000
 #   ./scripts/azure.sh argocd    # ArgoCD em https://localhost:8444
 #   ./scripts/azure.sh senhas    # senhas do Grafana e do ArgoCD
+#   ./scripts/azure.sh codigo <email>   # link de verificação de e-mail de uma conta (sem SMTP, só no log)
 #   ./scripts/azure.sh ssh       # shell na VM
 #
 # O Grafana e o ArgoCD não têm Ingress na nuvem: o acesso é um port-forward feito DENTRO da VM e
@@ -56,6 +57,14 @@ case "$cmd" in
     vm_kubectl -n observability get secret grafana-admin -o "jsonpath='{.data.admin-password}'" | tr -d "'" | base64 -d; echo
     echo -n "ArgoCD  (admin): "
     vm_kubectl -n argocd get secret argocd-initial-admin-secret -o "jsonpath='{.data.password}'" | tr -d "'" | base64 -d; echo
+    ;;
+  codigo)
+    # Sem SMTP o e-mail de verificação é só log: este atalho acha o link da conta pelo e-mail.
+    email="${2:-}"
+    [ -n "$email" ] || { echo "uso: ./scripts/azure.sh codigo <email-da-conta>" >&2; exit 1; }
+    link="$(vm_kubectl -n l2 logs -l app.kubernetes.io/name=l2-api --tail=800 \
+      | grep -F -A12 "$email" | grep -o 'https\?://[^ ]*verificar-email?token=[A-Za-z0-9._~-]*' | tail -1 || true)"
+    [ -n "$link" ] && echo "$link" || { echo "Nenhum e-mail de verificação para ${email} nos logs recentes." >&2; exit 1; }
     ;;
   ssh) ssh_vm ;;
   *) sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//'; exit 1 ;;
