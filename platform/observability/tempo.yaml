@@ -44,12 +44,35 @@ spec:
                 processors:
                   - service-graphs
                   - span-metrics
+          # Na VM o Tempo entrou em crash loop (50+ reinícios): ao fechar um bloco do WAL ele deixava de
+          # responder ao /ready por alguns segundos, a liveness (5 s, 3 falhas) o matava, o WAL ficava
+          # corrompido e o ciclo recomeçava. CPU reservada de 50m era a mais baixa da plataforma.
           resources:
             requests:
-              cpu: 50m
-              memory: 128Mi
+              cpu: 200m
+              memory: 256Mi
             limits:
-              memory: 512Mi
+              memory: 1Gi
+          # Tolerante: dá tempo de terminar o trabalho de partida (replay do WAL, fechar bloco) antes de
+          # concluir que travou. O padrão do chart é initialDelay 30 s, timeout 5 s e 3 falhas.
+          livenessProbe:
+            httpGet:
+              path: /ready
+              port: 3200
+            initialDelaySeconds: 90
+            periodSeconds: 15
+            timeoutSeconds: 15
+            failureThreshold: 8
+            successThreshold: 1
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 3200
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            timeoutSeconds: 10
+            failureThreshold: 6
+            successThreshold: 1
         persistence:
           enabled: true
           size: 2Gi
