@@ -12,14 +12,14 @@ resources:
 # constrói as imagens de um checkout local do portal-app com essa tag.
 images:
   - name: ghcr.io/meloju/portal-app-backend
-    newTag: sha-de1c1aa
-    digest: sha256:8c3964b3d5f3dbb0b03ac502b42865a55bccf26ab8cf8c0c8aa3f418f7a17036
+    newTag: sha-cb43e94
+    digest: sha256:209b94fdec6c2f2edfffef3ea5fe4a5a792d8c8424a100e91ad06a850a5daad1
   - name: ghcr.io/meloju/portal-app-frontend
-    newTag: sha-de1c1aa
-    digest: sha256:6c6058a2a26d83aeb365afcd1c4bc9a6b960ce987a7029611643e696e144b23f
+    newTag: sha-cb43e94
+    digest: sha256:543822f6e2e125bb715d37b490300d51bceda5b86e3dd1837e2a23c180c143fb
   - name: ghcr.io/meloju/portal-app-tools-api
-    newTag: sha-de1c1aa
-    digest: sha256:435df8a3fffc012baf757caa29ff9c00826a1c7e1f251565219ef21c0f2cc127
+    newTag: sha-cb43e94
+    digest: sha256:ba41e4f2e3f3faca90ce2e699dab08acb65290b3a1024370d09296cf50f22ae7
 configMapGenerator:
   - name: l2-config
     behavior: merge
