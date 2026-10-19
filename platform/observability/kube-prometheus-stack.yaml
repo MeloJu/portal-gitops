@@ -90,12 +90,24 @@ spec:
                   enabled: true
           # Medido na VM Azure: o Grafana usa ~340 MiB com o dashboard de 19 painéis aberto e o limite
           # antigo (384 MiB) o matava por OOM a cada consulta pesada (Explore do Tempo, períodos longos).
+          # Com várias abas abertas (atualização de 5 s) chegou a ~590 MiB e a CPU reservada (50m) era a
+          # mais baixa da plataforma, então a sonda de 1 s falhava sob carga: mais folga nos dois.
           resources:
             requests:
-              cpu: 50m
-              memory: 256Mi
+              cpu: 200m
+              memory: 384Mi
             limits:
-              memory: 768Mi
+              memory: 1Gi
+          # O padrão do chart não define timeout (1 s no Kubernetes). Uma resposta lenta de /api/health
+          # tirava o pod do Service e o Traefik respondia "no available server". Agora tolera 5 s e
+          # só retira depois de 6 falhas seguidas (~1 min); a liveness (que reinicia) já era folgada.
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: grafana
+            timeoutSeconds: 5
+            periodSeconds: 10
+            failureThreshold: 6
   destination:
     server: https://kubernetes.default.svc
     namespace: observability
