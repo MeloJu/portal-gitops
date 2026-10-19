@@ -14,14 +14,14 @@ resources:
 # deliberada, copiando este bloco a partir do `local` depois que a versão provou-se lá (task D5).
 images:
   - name: ghcr.io/meloju/portal-app-backend
-    newTag: sha-f6a2ea0
-    digest: sha256:b58b5496ac5edd3690b53c8b8910183125c21101383ccc7a81e343cf2c04d966
+    newTag: sha-c546009
+    digest: sha256:8f770d33ed1e8b5a724d3330858279962fe1cad71a4dcbf2d1eb04710eba96e2
   - name: ghcr.io/meloju/portal-app-frontend
-    newTag: sha-f6a2ea0
-    digest: sha256:1f772fb9812cd0488b559de46add082c40bd51cd932f94914921425f078812c4
+    newTag: sha-c546009
+    digest: sha256:bdec277e069a5d7ec4df1b3c1973ed58ddfec9dd22beef54817e478cc88f17d1
   - name: ghcr.io/meloju/portal-app-tools-api
-    newTag: sha-f6a2ea0
-    digest: sha256:f62eb974a6897d82c54d791144ba1c032cbe11bbea66750b04b629caedc0a82f
+    newTag: sha-c546009
+    digest: sha256:4a52906a6529b5d060f0d4c7f113e594106c462477e3f30bb5e33de0bf2c4783
 configMapGenerator:
   - name: l2-config
     behavior: merge

@@ -131,6 +131,46 @@ portal-app (develop) ──CI/CD──► PR de bump ──► portal-gitops dev
 Mudar de `develop` para `main` num cluster que já roda exige reaplicar o `root` uma vez
 (`./scripts/bootstrap-azure.sh`), porque a Application `root` é criada à mão.
 
+## Verificação de e-mail (a imagem nova exige)
+
+A partir do `sha-c546009` o `portal-app` só deixa **criar portal com o e-mail verificado**
+(`EMAIL_NOT_VERIFIED`). As contas que já existiam foram marcadas como verificadas pela migração V3; só contas
+**novas** passam pelo fluxo:
+
+1. Cadastre-se no site. Tentar criar um portal responde `EMAIL_NOT_VERIFIED`.
+2. Sem SMTP (`MAIL_ENABLED=false`, o padrão) o "e-mail" é simulado: o link vai para o log da API. Pegue-o com
+   `./scripts/azure.sh codigo <email-da-conta>`, que imprime `https://…/verificar-email?token=…`.
+3. Abra o link (vale 30 min, uma vez). O portal passa a poder ser criado.
+
+Para mandar e-mail de verdade, configure `MAIL_ENABLED=true`, `MAIL_FROM` e as variáveis `SMTP_*` (as credenciais
+entram no `l2-secrets` por SealedSecret, nunca no Git).
+
+## Voltar atrás (rollback)
+
+O Azure segue a `main` e o ArgoCD tem `selfHeal`: o botão *Rollback* da interface do ArgoCD **não resolve**, porque
+o ArgoCD reaplica o Git em seguida. O rollback é do Git:
+
+```bash
+gh pr create --base main --head <branch-com-o-git-revert> ...   # `git revert -m 1 <merge do release>` na main
+```
+
+O Argo aplica a versão anterior em ~3 min (a API reinicia). O **banco não volta junto**: as migrações V3 e V4 são
+aditivas (colunas anuláveis ou com valor padrão e tabelas novas), então a imagem antiga continua funcionando com o
+schema novo, mas confira. O backup de antes da promoção é o `l2-20261019T141802Z.dump` (ver [`backup.md`](backup.md)).
+
+## O que o `l2-secrets` precisa ter
+
+| Chave | Para quê | Obrigatória |
+| --- | --- | --- |
+| `DB_PASSWORD`, `POSTGRES_PASSWORD` | senha do banco (a role `l2_app` e o superuser) | sim |
+| `JWT_SECRET` | assina a sessão (≥ 256 bits) | sim |
+| `APP_CODE_PEPPER` | pepper dos códigos de verificação (≥ 256 bits); as imagens do `portal-app` **não sobem sem ele** | sim, a partir das imagens que o exigem |
+| `VT_API_KEY` | análise do VirusTotal | não |
+
+Uma chave nova entra com `kubeseal --merge-into` (sem trocar as outras), como na seção abaixo. Foi assim que o
+`APP_CODE_PEPPER` chegou: o `portal-app` passou a exigi-lo e todos os PRs de bump falharam no smoke test até o
+`portal-gitops` fornecê-lo, o que é exatamente o que esse check existe para pegar.
+
 ## Chave do VirusTotal (opcional)
 
 A tools-api só faz a análise de segurança de links (`POST /tools/scan`) se o `l2-secrets` tiver
