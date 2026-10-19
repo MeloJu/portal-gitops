@@ -49,6 +49,24 @@ code_http="$(curl -s -o /dev/null -w '%{http_code}' -c "$jar" -H 'Content-Type: 
   "http://127.0.0.1:${API}/api/auth/register")"
 [ "$code_http" = 201 ] && pass "cadastro 201" || fail "cadastro: HTTP ${code_http}"
 
+# As imagens novas do portal-app só deixam criar portal com o e-mail verificado. Sem SMTP o e-mail é
+# simulado: o link com o token vai para o log da API (LoggingEmailSender), e é de lá que o smoke o lê.
+# Uma imagem antiga não manda esse e-mail: o passo é pulado e o resto do teste segue igual.
+token=""
+for _ in $(seq 1 15); do
+  token="$(kubectl -n "$NS" logs deploy/l2-api --tail=400 2>/dev/null \
+    | grep -F -A12 "$email" | grep -o 'verificar-email?token=[A-Za-z0-9._~-]*' | tail -1 | cut -d= -f2 || true)"
+  [ -n "$token" ] && break
+  sleep 1
+done
+if [ -n "$token" ]; then
+  verify_http="$(curl -s -o /dev/null -w '%{http_code}' -H 'Content-Type: application/json' \
+    -d "{\"token\":\"${token}\"}" "http://127.0.0.1:${API}/api/auth/verify-email")"
+  [ "$verify_http" = 204 ] && pass "e-mail verificado (token lido do log)" || fail "verificação do e-mail: HTTP ${verify_http}"
+else
+  echo "  --    sem e-mail de verificação no log (imagem sem esse passo): seguindo"
+fi
+
 alias="smoke$RANDOM"
 link="$(curl -s -b "$jar" -H 'Content-Type: application/json' \
   -d "{\"targetUrl\":\"https://example.com/smoke\",\"alias\":\"${alias}\"}" "http://127.0.0.1:${API}/api/links")"
