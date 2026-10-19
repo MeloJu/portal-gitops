@@ -398,6 +398,30 @@ main      ← produção (a nuvem segue esta branch)
         <img src="https://img.shields.io/badge/LinkedIn-0077B5?style=for-the-badge&logo=linkedin&logoColor=white" alt="LinkedIn">
       </a>
     </td>
+    <td align="center">
+      <img src="https://github.com/gracecraftdev.png?size=240" alt="Gracekely Alves" width="120" height="120" style="border-radius: 50%;">
+      <br>
+      <strong>Gracekely Alves</strong>
+      <br>
+      <a href="https://github.com/gracecraftdev" target="_blank">
+        <img src="https://img.shields.io/badge/GitHub-100000?style=for-the-badge&logo=github&logoColor=white" alt="GitHub">
+      </a>
+      <a href="https://www.linkedin.com/in/gracekely-alves-de-melo/" target="_blank">
+        <img src="https://img.shields.io/badge/LinkedIn-0077B5?style=for-the-badge&logo=linkedin&logoColor=white" alt="LinkedIn">
+      </a>
+    </td>
+    <td align="center">
+      <img src="https://github.com/codArtic0.png?size=240" alt="Raul Sousa" width="120" height="120" style="border-radius: 50%;">
+      <br>
+      <strong>Raul Sousa</strong>
+      <br>
+      <a href="https://github.com/codArtic0" target="_blank">
+        <img src="https://img.shields.io/badge/GitHub-100000?style=for-the-badge&logo=github&logoColor=white" alt="GitHub">
+      </a>
+      <a href="https://www.linkedin.com/in/raulsousapv/" target="_blank">
+        <img src="https://img.shields.io/badge/LinkedIn-0077B5?style=for-the-badge&logo=linkedin&logoColor=white" alt="LinkedIn">
+      </a>
+    </td>
   </tr>
 </table>
 
